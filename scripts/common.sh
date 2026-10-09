@@ -1,0 +1,189 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# EasyDrop 通用脚本工具库 (Scripts Common Library)
+# 提供跨平台终端色彩、国际化、目录检测、JSON处理及格式化打印
+# ==============================================================================
+
+# ----------------- 终端色彩设置 -----------------
+setup_terminal_colors() {
+  if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+    BOLD='\033[1m'
+    DIM='\033[2m'
+    RESET='\033[0m'
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[0;33m'
+    BLUE='\033[0;34m'
+    MAGENTA='\033[0;35m'
+    CYAN='\033[0;36m'
+    WHITE='\033[1;37m'
+    BG_BLUE='\033[44m'
+    BG_CYAN='\033[46m'
+  else
+    BOLD=''
+    DIM=''
+    RESET=''
+    RED=''
+    GREEN=''
+    YELLOW=''
+    BLUE=''
+    MAGENTA=''
+    CYAN=''
+    WHITE=''
+    BG_BLUE=''
+    BG_CYAN=''
+  fi
+}
+setup_terminal_colors
+
+# ----------------- 优雅日志输出 -----------------
+log_info() {
+  echo -e "  ${CYAN}ℹ${RESET}  $*"
+}
+
+log_success() {
+  echo -e "  ${GREEN}✓${RESET}  $*"
+}
+
+log_warn() {
+  echo -e "  ${YELLOW}!${RESET}  ${YELLOW}$*${RESET}"
+}
+
+log_error() {
+  echo -e "  ${RED}✗${RESET}  ${RED}$*${RESET}"
+}
+
+log_step() {
+  local step_num="$1"
+  local step_desc="$2"
+  echo -e "\n${BOLD}${CYAN}━━━ [${step_num}] ${step_desc} ━━━${RESET}"
+}
+
+# ----------------- 打印横幅 Banner -----------------
+print_banner() {
+  local title="$1"
+  local subtitle="${2:-}"
+  echo -e "${CYAN}${BOLD}"
+  echo "╔════════════════════════════════════════════════════════════════╗"
+  printf "║  %-60s║\n" "$title"
+  if [ -n "$subtitle" ]; then
+    printf "║  %-60s║\n" "$subtitle"
+  fi
+  echo "╚════════════════════════════════════════════════════════════════╝"
+  echo -e "${RESET}"
+}
+
+# ----------------- 格式化输出键值卡片 -----------------
+print_card_row() {
+  local label="$1"
+  local val="$2"
+  printf "  ${BOLD}%-20s${RESET}: %b\n" "$label" "$val"
+}
+
+# ----------------- 本机 IP 地址探测 -----------------
+get_local_ip() {
+  local ip=""
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    ip=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)
+  fi
+  if [ -z "$ip" ] && command -v hostname >/dev/null 2>&1; then
+    ip=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+  fi
+  if [ -z "$ip" ] && command -v ip >/dev/null 2>&1; then
+    ip=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7}' || true)
+  fi
+  if [ -z "$ip" ] && command -v ifconfig >/dev/null 2>&1; then
+    ip=$(ifconfig 2>/dev/null | grep -E "inet " | grep -v 127.0.0.1 | awk '{print $2}' | head -n 1 || true)
+  fi
+  if [ -z "$ip" ]; then
+    ip="127.0.0.1"
+  fi
+  echo "$ip"
+}
+
+# ----------------- 人类可读文件大小 -----------------
+format_bytes() {
+  local bytes="$1"
+  if [ -z "$bytes" ] || ! [[ "$bytes" =~ ^[0-9]+$ ]]; then
+    echo "0 B"
+    return
+  fi
+  if [ "$bytes" -ge 1073741824 ]; then
+    echo "$(awk -v b="$bytes" 'BEGIN { printf "%.2f GB", b/1073741824 }')"
+  elif [ "$bytes" -ge 1048576 ]; then
+    echo "$(awk -v b="$bytes" 'BEGIN { printf "%.2f MB", b/1048576 }')"
+  elif [ "$bytes" -ge 1024 ]; then
+    echo "$(awk -v b="$bytes" 'BEGIN { printf "%.2f KB", b/1024 }')"
+  else
+    echo "${bytes} B"
+  fi
+}
+
+# ----------------- 读写 JSON 工具 -----------------
+json_read() {
+  local file="$1"
+  local key="$2"
+  if [ ! -f "$file" ]; then
+    echo ""
+    return
+  fi
+  if command -v node >/dev/null 2>&1; then
+    node -e "try { const d = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')); console.log(d[process.argv[2]] ?? ''); } catch(e) { console.log(''); }" "$file" "$key" 2>/dev/null || true
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c "import sys, json; print(json.load(open(sys.argv[1])).get(sys.argv[2], ''))" "$file" "$key" 2>/dev/null || true
+  else
+    grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$file" 2>/dev/null | head -n1 | sed -E "s/\"$key\"[[:space:]]*:[[:space:]]*\"([^\"]*)\"/\1/" || true
+  fi
+}
+
+# ----------------- 安全检查：拦截高危目录误删 -----------------
+is_dangerous_dir() {
+  local raw_dir="$1"
+  if [ -z "$raw_dir" ]; then
+    return 0 # dangerous
+  fi
+  # 规范化路径
+  local abs_dir
+  if [ -d "$raw_dir" ]; then
+    abs_dir=$(cd "$raw_dir" && pwd)
+  else
+    abs_dir=$(cd "$(dirname "$raw_dir")" 2>/dev/null && pwd)/$(basename "$raw_dir")
+  fi
+
+  case "$abs_dir" in
+    "/" | "/bin" | "/sbin" | "/etc" | "/usr" | "/usr/bin" | "/usr/lib" | "/var" | "/var/lib" | "/var/log" | "/tmp" | "/home" | "/root" | "/Users" | "/System" | "/Library" | "/Applications")
+      return 0 # dangerous
+      ;;
+    *)
+      # 必须路径深度至少两层以上
+      if [ "$abs_dir" = "/" ] || [ -z "$abs_dir" ]; then
+        return 0
+      fi
+      return 1 # safe
+      ;;
+  esac
+}
+
+# ----------------- 确保目录具有写权限 (尝试提权) -----------------
+ensure_writable_dir() {
+  local target_dir="$1"
+  if [ -d "$target_dir" ] && [ -w "$target_dir" ]; then
+    return 0
+  fi
+
+  if mkdir -p "$target_dir" 2>/dev/null && [ -w "$target_dir" ]; then
+    return 0
+  fi
+
+  # 若无写权限且为普通用户，尝试 sudo
+  if command -v sudo >/dev/null 2>&1; then
+    log_warn "需要管理员权限创建/配置工作目录: ${target_dir}"
+    sudo mkdir -p "$target_dir"
+    sudo chown -R "$(id -u):$(id -g)" "$target_dir" 2>/dev/null || true
+    if [ -w "$target_dir" ]; then
+      return 0
+    fi
+  fi
+
+  return 1
+}

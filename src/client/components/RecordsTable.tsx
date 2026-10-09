@@ -1,0 +1,915 @@
+import React, { useState } from 'react';
+import {
+  FileText,
+  File,
+  Folder,
+  Search,
+  Trash2,
+  Download,
+  Copy,
+  Check,
+  Globe,
+  ExternalLink,
+  MoreHorizontal,
+  FolderArchive,
+  Image as ImageIcon,
+  FileCode,
+  Lock,
+  ShieldCheck,
+  Link2,
+  QrCode,
+  Eye,
+} from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { ShareItem, ShareItemType, SystemStats } from '@shared/types';
+import { formatBytes, formatDisplayTime, getFileTypeLabel } from '../utils/format';
+import { copyToClipboard } from '../utils/clipboard';
+import { PasswordModal } from './PasswordModal';
+import { AuditLogModal } from './AuditLogModal';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
+import { FileQrModal } from './FileQrModal';
+import { TextMarkdownModal } from './TextMarkdownModal';
+import { ShareInfoModal } from './ShareInfoModal';
+import { ClearRecordsModal, ClearRecordsOptions } from './ClearRecordsModal';
+import { getCharacterInfo } from '../utils/nickname';
+
+interface RecordsTableProps {
+  records: ShareItem[];
+  stats: SystemStats;
+  currentAccessUrl?: string;
+  activeTab: 'all' | ShareItemType;
+  setActiveTab: (tab: 'all' | ShareItemType) => void;
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+  selectedIds: Set<string>;
+  toggleSelect: (id: string) => void;
+  toggleSelectAll: () => void;
+  onCopyText: (item: ShareItem, customText?: string) => Promise<boolean>;
+  onDownload: (item: ShareItem, password?: string) => void;
+  onDeleteOne: (id: string) => void;
+  onBatchDelete: () => void;
+  onClearAll: (options?: ClearRecordsOptions) => Promise<any> | void;
+  verifyPassword: (id: string, password: string) => Promise<string>;
+  onCopyShareLink?: (id: string) => void;
+}
+
+export const RecordsTable: React.FC<RecordsTableProps> = ({
+  records,
+  stats,
+  currentAccessUrl,
+  activeTab,
+  setActiveTab,
+  searchQuery,
+  setSearchQuery,
+  selectedIds,
+  toggleSelect,
+  toggleSelectAll,
+  onCopyText,
+  onDownload,
+  onDeleteOne,
+  onBatchDelete,
+  onClearAll,
+  verifyPassword,
+  onCopyShareLink,
+}) => {
+  const { t } = useTranslation();
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [previewItem, setPreviewItem] = useState<ShareItem | null>(null);
+  const [markdownModalItem, setMarkdownModalItem] = useState<ShareItem | null>(null);
+  const [auditModalOpen, setAuditModalOpen] = useState(false);
+  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
+  const [fileQrData, setFileQrData] = useState<{ item: ShareItem; downloadUrl: string } | null>(null);
+  const [shareModalItem, setShareModalItem] = useState<ShareItem | null>(null);
+  const [clearRecordsModalOpen, setClearRecordsModalOpen] = useState(false);
+
+  // 获取文件或记录的下载/直链 URL (采用顶部选中的当前默认 IP)
+  const getItemDirectUrl = (item: ShareItem): string => {
+    const origin = (currentAccessUrl || window.location.origin).replace(/\/+$/, '');
+    return `${origin}/api/records/${item.id}/download`;
+  };
+
+  // 获取分享页面直链 (若有密码则优先指向提取页面)
+  const getItemShareUrl = (item: ShareItem): string => {
+    const origin = (currentAccessUrl || window.location.origin).replace(/\/+$/, '');
+    return item.hasPassword ? `${origin}/download/${item.id}` : `${origin}/api/records/${item.id}/download`;
+  };
+
+  // 复制下载链接 (若存在密码，展开小弹窗展示详情)
+  const handleCopyDownloadLink = async (item: ShareItem) => {
+    if (item.hasPassword) {
+      setShareModalItem(item);
+      return;
+    }
+
+    const link = getItemDirectUrl(item);
+    const ok = await copyToClipboard(link);
+    if (ok) {
+      setCopiedLinkId(item.id);
+      setTimeout(() => setCopiedLinkId(null), 2000);
+      onCopyShareLink?.(item.id);
+    }
+  };
+
+  // 发送文字内容，摘录前15个字符作为内容/文件名
+  const getTextDisplayTitle = (item: ShareItem): string => {
+    if (item.type !== 'text') return item.title || item.fileName || 'Item';
+    const raw = item.title || item.content || 'Text';
+    const oneLine = raw.replace(/\s+/g, ' ').trim();
+    return oneLine.length > 15 ? `${oneLine.substring(0, 15)}...` : oneLine;
+  };
+
+  // 打开下载二维码弹窗 (若有密码指向提取页面)
+  const handleOpenItemQr = (item: ShareItem) => {
+    const link = getItemShareUrl(item);
+    setFileQrData({
+      item,
+      downloadUrl: link,
+    });
+  };
+
+  // 删除操作确认弹窗状态
+  const [deleteModalState, setDeleteModalState] = useState<{
+    isOpen: boolean;
+    title: string;
+    content: string;
+    subContent?: string;
+    confirmText?: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    content: '',
+    onConfirm: () => {},
+  });
+
+  const triggerDeleteOne = (item: ShareItem) => {
+    setDeleteModalState({
+      isOpen: true,
+      title: t('records.delModalTitle'),
+      content: t('records.delModalContent', { title: item.title || item.fileName || 'Item' }),
+      subContent: t('records.delModalSub'),
+      confirmText: t('records.delModalConfirm'),
+      onConfirm: () => {
+        onDeleteOne(item.id);
+        setDeleteModalState((prev) => ({ ...prev, isOpen: false }));
+      },
+    });
+  };
+
+  const triggerBatchDelete = () => {
+    if (selectedIds.size === 0) return;
+    setDeleteModalState({
+      isOpen: true,
+      title: t('records.batchDelModalTitle'),
+      content: t('records.batchDelModalContent', { count: selectedIds.size }),
+      subContent: t('records.batchDelModalSub'),
+      confirmText: t('records.batchDelModalConfirm', { count: selectedIds.size }),
+      onConfirm: () => {
+        onBatchDelete();
+        setDeleteModalState((prev) => ({ ...prev, isOpen: false }));
+      },
+    });
+  };
+
+  const triggerClearAll = () => {
+    if (records.length === 0 && stats.totalRecords === 0) return;
+    setClearRecordsModalOpen(true);
+  };
+
+  // 密码验证弹窗状态
+  const [pwdModalState, setPwdModalState] = useState<{
+    isOpen: boolean;
+    item: ShareItem | null;
+    actionType: 'copy' | 'download' | 'preview' | 'view_markdown';
+  }>({
+    isOpen: false,
+    item: null,
+    actionType: 'copy',
+  });
+
+  // 触发复制 (若文本受密码保护且尚未解密，先弹窗校验；若已解密则直接复制)
+  const handleCopyClick = async (item: ShareItem) => {
+    if (item.hasPassword && !item.content) {
+      setPwdModalState({
+        isOpen: true,
+        item,
+        actionType: 'copy',
+      });
+      return;
+    }
+
+    const ok = await onCopyText(item, item.content);
+    if (ok) {
+      setCopiedId(item.id);
+      setTimeout(() => setCopiedId(null), 2000);
+    }
+  };
+
+  // 触发下载
+  const handleDownloadClick = (item: ShareItem) => {
+    if (item.hasPassword) {
+      setPwdModalState({
+        isOpen: true,
+        item,
+        actionType: 'download',
+      });
+      return;
+    }
+    onDownload(item);
+  };
+
+  // 触发查看详情
+  const handlePreviewClick = (item: ShareItem) => {
+    if (item.hasPassword && item.type === 'text' && !item.content) {
+      setPwdModalState({
+        isOpen: true,
+        item,
+        actionType: 'preview',
+      });
+      return;
+    }
+    setPreviewItem(item);
+  };
+
+  // 触发查看 Markdown 大弹窗
+  const handleViewMarkdownClick = async (item: ShareItem) => {
+    if (item.hasPassword && !item.content) {
+      setPwdModalState({
+        isOpen: true,
+        item,
+        actionType: 'view_markdown',
+      });
+      return;
+    }
+    setMarkdownModalItem(item);
+  };
+
+  // 密码弹窗提交确认
+  const handlePasswordConfirm = async (password: string) => {
+    const item = pwdModalState.item;
+    if (!item) return;
+
+    if (pwdModalState.actionType === 'copy') {
+      const decryptedContent = await verifyPassword(item.id, password);
+      const ok = await onCopyText(item, decryptedContent);
+      if (ok) {
+        setCopiedId(item.id);
+        setTimeout(() => setCopiedId(null), 2000);
+      }
+    } else if (pwdModalState.actionType === 'download') {
+      // 必须先校验密码，若密码错误将抛出异常并由 PasswordModal 捕获提示，防止错误直跳
+      await verifyPassword(item.id, password);
+      onDownload(item, password);
+    } else if (pwdModalState.actionType === 'preview') {
+      const decryptedContent = await verifyPassword(item.id, password);
+      setPreviewItem({
+        ...item,
+        content: decryptedContent,
+      });
+    } else if (pwdModalState.actionType === 'view_markdown') {
+      const decryptedContent = await verifyPassword(item.id, password);
+      setMarkdownModalItem({
+        ...item,
+        content: decryptedContent,
+      });
+    }
+  };
+
+  const getRecordIcon = (item: ShareItem) => {
+    if (item.type === 'text') {
+      return (
+        <div className="w-7 h-7 rounded-lg bg-sky-100 text-sky-600 flex items-center justify-center shrink-0">
+          <FileText className="w-4 h-4" />
+        </div>
+      );
+    }
+    if (item.type === 'image') {
+      return (
+        <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+          <ImageIcon className="w-4 h-4" />
+        </div>
+      );
+    }
+    if (item.type === 'folder') {
+      return (
+        <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+          <Folder className="w-4 h-4 fill-amber-500 stroke-none" />
+        </div>
+      );
+    }
+
+    const ext = (item.extension || '').toLowerCase();
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) {
+      return (
+        <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+          <ImageIcon className="w-4 h-4" />
+        </div>
+      );
+    }
+    if (['pdf'].includes(ext)) {
+      return (
+        <div className="w-7 h-7 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+          <File className="w-4 h-4" />
+        </div>
+      );
+    }
+    if (['ts', 'js', 'py', 'java', 'html', 'json'].includes(ext)) {
+      return (
+        <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+          <FileCode className="w-4 h-4" />
+        </div>
+      );
+    }
+    if (['zip', 'rar', 'tar', 'gz'].includes(ext)) {
+      return (
+        <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
+          <FolderArchive className="w-4 h-4" />
+        </div>
+      );
+    }
+
+    return (
+      <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+        <File className="w-4 h-4" />
+      </div>
+    );
+  };
+
+  const isAllSelected = records.length > 0 && selectedIds.size === records.length;
+
+  return (
+    <div id="records-section" className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+      {/* 顶部操作工具栏 */}
+      <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        {/* 左侧：标题与分类药丸 */}
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-blue-600" />
+            <h2 className="text-sm font-bold text-slate-800 tracking-tight">{t('records.title')}</h2>
+          </div>
+
+          {/* 分类 Tabs */}
+          <div className="flex items-center gap-1.5 bg-slate-100/70 p-1 rounded-xl">
+            <button
+              onClick={() => setActiveTab('all')}
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
+                activeTab === 'all'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+              }`}
+            >
+              {t('records.tabAll')} ({stats.totalRecords})
+            </button>
+            <button
+              onClick={() => setActiveTab('text')}
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
+                activeTab === 'text'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+              }`}
+            >
+              {t('records.tabText')} ({stats.textCount})
+            </button>
+            <button
+              onClick={() => setActiveTab('image')}
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
+                activeTab === 'image'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+              }`}
+            >
+              {t('records.tabImage')} ({stats.imageCount || 0})
+            </button>
+            <button
+              onClick={() => setActiveTab('file')}
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
+                activeTab === 'file'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+              }`}
+            >
+              {t('records.tabFile')} ({stats.fileCount})
+            </button>
+            <button
+              onClick={() => setActiveTab('folder')}
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
+                activeTab === 'folder'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+              }`}
+            >
+              {t('records.tabFolder')} ({stats.folderCount})
+            </button>
+          </div>
+        </div>
+
+        {/* 右侧：搜索框与批量操作 */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* 搜索框 */}
+          <div className="relative min-w-[200px] flex-1 sm:flex-initial">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t('records.searchPlaceholder')}
+              className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-700 placeholder-slate-400 transition"
+            />
+          </div>
+
+          {/* 全选 */}
+          <label className="flex items-center gap-1.5 text-xs text-slate-600 select-none cursor-pointer pl-1">
+            <input
+              type="checkbox"
+              checked={isAllSelected}
+              onChange={toggleSelectAll}
+              className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+            />
+            <span>{t('records.selectAll')}{selectedIds.size > 0 ? t('records.selectedCount', { count: selectedIds.size }) : ''}</span>
+          </label>
+
+          {/* 批量清理 */}
+          {selectedIds.size > 0 && (
+            <button
+              onClick={triggerBatchDelete}
+              className="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 rounded-xl text-xs font-medium transition active:scale-95"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {t('records.batchDelete')}
+            </button>
+          )}
+
+          {/* 一键清空全部 */}
+          <button
+            onClick={triggerClearAll}
+            className="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-500 hover:bg-rose-600 active:scale-95 text-white rounded-xl text-xs font-medium shadow-sm transition"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            {t('records.clearAll')}
+          </button>
+
+          {/* 操作审计按钮 */}
+          <button
+            type="button"
+            onClick={() => setAuditModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100/90 text-indigo-700 border border-indigo-200/80 active:scale-95 rounded-xl text-xs font-semibold shadow-xs transition"
+            title={t('records.auditLogTitle')}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+            <span>{t('records.auditLog')}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 数据表格 */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse min-w-[760px]">
+          <thead>
+            <tr className="border-b border-slate-100 bg-slate-50/60 text-[11px] font-medium text-slate-400 select-none whitespace-nowrap">
+              <th className="py-2.5 px-4 w-10 text-center shrink-0"></th>
+              <th className="py-2.5 px-3 w-24 shrink-0">{t('records.thType')}</th>
+              <th className="py-2.5 px-4 w-[260px] max-w-[320px]">{t('records.thContent')}</th>
+              <th className="py-2.5 px-3 w-28 shrink-0 text-center">{t('records.thSender', '发送者')}</th>
+              <th className="py-2.5 px-4 w-28 shrink-0">{t('records.thTime')}</th>
+              <th className="py-2.5 px-4 w-32 shrink-0 text-center">{t('records.thPermission')}</th>
+              <th className="py-2.5 px-4 w-72 min-w-[280px] shrink-0 text-right">{t('records.thActions')}</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 text-xs">
+            {records.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                      <Search className="w-5 h-5" />
+                    </div>
+                    <span>{t('records.emptySearch')}</span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              records.map((item) => {
+                const isSelected = selectedIds.has(item.id);
+                return (
+                  <tr
+                    key={item.id}
+                    className={`transition group ${
+                      isSelected ? 'bg-blue-50/30' : 'hover:bg-slate-50/70'
+                    }`}
+                  >
+                    {/* 复选框 */}
+                    <td className="py-3 px-4 text-center shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(item.id)}
+                        className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                      />
+                    </td>
+
+                    {/* 类型 */}
+                    <td className="py-3 px-3 whitespace-nowrap shrink-0">
+                      <div className="flex items-center gap-1.5 whitespace-nowrap">
+                        {getRecordIcon(item)}
+                        <span className="text-slate-600 font-medium whitespace-nowrap">
+                          {item.type === 'text'
+                            ? t('records.typeText')
+                            : item.type === 'image'
+                            ? t('records.typeImage')
+                            : item.type === 'folder'
+                            ? t('records.typeFolder')
+                            : t('records.typeFile')}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* 内容 / 文件名 */}
+                    <td className="py-3 px-4 max-w-[280px] sm:max-w-[320px]">
+                      <div className="flex flex-col min-w-0">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {item.isUrl ? (
+                            <a
+                              href={item.content}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-medium text-blue-600 hover:underline flex items-center gap-1 truncate max-w-full"
+                              title={item.content || item.title}
+                            >
+                              <span className="truncate">{getTextDisplayTitle(item)}</span>
+                              <ExternalLink className="w-3 h-3 shrink-0" />
+                            </a>
+                          ) : (
+                            <span
+                              onClick={() => (item.type === 'text' ? handleViewMarkdownClick(item) : handlePreviewClick(item))}
+                              className="font-medium text-slate-800 hover:text-blue-600 cursor-pointer truncate max-w-full"
+                              title={item.type === 'text' ? item.content || item.title : item.fileName || item.title}
+                            >
+                              {getTextDisplayTitle(item)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1.5 min-w-0">
+                          <span className="shrink-0">{formatBytes(item.fileSize)}</span>
+                          <span className="shrink-0 text-slate-300">·</span>
+                          <span className="truncate">
+                            {item.type === 'text'
+                              ? item.isUrl
+                                ? t('records.webUrl')
+                                : t('records.textSummary', { count: (item.content || item.title || '').length })
+                              : item.type === 'folder'
+                              ? t('preview.folderWithCount', { count: item.fileCount || 0 })
+                              : item.type === 'image'
+                              ? t('records.imageFile')
+                              : getFileTypeLabel(item.fileName, item.extension, item.mimeType)}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* 发送者 / 角色昵称 */}
+                    <td className="py-3 px-3 whitespace-nowrap shrink-0 text-center align-middle">
+                      <div className="flex items-center justify-center">
+                        <span
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100/90 text-slate-700 border border-slate-200/60 max-w-[130px] truncate"
+                          title={item.senderName || item.nickname || '海绵宝宝'}
+                        >
+                          <span className="text-xs leading-none shrink-0">
+                            {getCharacterInfo(item.senderName || item.nickname).emoji}
+                          </span>
+                          <span className="truncate">{item.senderName || item.nickname || '海绵宝宝'}</span>
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* 发送时间 */}
+                    <td className="py-3 px-4 text-slate-500 whitespace-nowrap shrink-0">
+                      {formatDisplayTime(item.createdAt)}
+                    </td>
+
+                    {/* 访问权限：优化为“局域网”与“密码”两种 */}
+                    <td className="py-3 px-4 whitespace-nowrap shrink-0 text-center align-middle">
+                      <div className="flex items-center justify-center">
+                        {item.hasPassword ? (
+                          <span
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap"
+                            title={t('records.pwdProtectedTitle')}
+                          >
+                            <Lock className="w-3 h-3 text-amber-600 shrink-0" />
+                            <span>{t('records.permPassword', '密码')}</span>
+                          </span>
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-600 border border-emerald-200/50 whitespace-nowrap"
+                            title={t('records.permLanTitle', '局域网内任意访客免密访问')}
+                          >
+                            <Globe className="w-3 h-3 shrink-0" />
+                            <span>{t('records.permLan', '局域网')}</span>
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* 操作列：单行绝不折行 */}
+                    <td className="py-3 px-4 text-right whitespace-nowrap shrink-0">
+                      <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                        {item.type === 'text' ? (
+                          <>
+                            {/* 查看 Markdown 内容 */}
+                            <button
+                              onClick={() => handleViewMarkdownClick(item)}
+                              className="inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded-lg border border-blue-200/90 text-blue-600 hover:text-blue-700 hover:bg-blue-50/70 bg-white text-[11px] font-medium shadow-xs transition active:scale-95 whitespace-nowrap shrink-0"
+                              title={item.hasPassword && !item.content ? t('records.tipViewPwd') : t('records.tipViewMarkdown')}
+                            >
+                              {item.hasPassword && !item.content ? (
+                                <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                              ) : (
+                                <Eye className="w-3.5 h-3.5 shrink-0" />
+                              )}
+                              <span className="whitespace-nowrap">{t('records.view')}</span>
+                            </button>
+
+                            {/* 复制文本内容 */}
+                            <button
+                              onClick={() => handleCopyClick(item)}
+                              className="inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded-lg border border-blue-200/90 text-blue-600 hover:text-blue-700 hover:bg-blue-50/70 bg-white text-[11px] font-medium shadow-xs transition active:scale-95 whitespace-nowrap shrink-0"
+                              title={item.hasPassword && !item.content ? t('records.tipCopyPwd') : t('records.tipCopy')}
+                            >
+                              {copiedId === item.id ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                  <span className="text-emerald-600 whitespace-nowrap">{t('records.copied')}</span>
+                                </>
+                              ) : (
+                                <>
+                                  {item.hasPassword && !item.content ? (
+                                    <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                  ) : (
+                                    <Copy className="w-3.5 h-3.5 shrink-0" />
+                                  )}
+                                  <span className="whitespace-nowrap">{t('records.copy')}</span>
+                                </>
+                              )}
+                            </button>
+
+                            {/* 复制文本专属链接 */}
+                            <button
+                              onClick={() => handleCopyDownloadLink(item)}
+                              className="inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50/50 bg-white text-[11px] font-medium shadow-xs transition active:scale-95 whitespace-nowrap shrink-0"
+                              title={item.hasPassword ? t('shareModal.title', '分享提取信息') : t('records.tipCopyLink')}
+                            >
+                              {copiedLinkId === item.id ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                  <span className="text-emerald-600 whitespace-nowrap">{t('records.copied')}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Link2 className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                                  <span className="whitespace-nowrap">{t('records.copyLink')}</span>
+                                </>
+                              )}
+                            </button>
+
+                            {/* 专属二维码 */}
+                            <button
+                              onClick={() => handleOpenItemQr(item)}
+                              className="inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50/50 bg-white text-[11px] font-medium shadow-xs transition active:scale-95 whitespace-nowrap shrink-0"
+                              title={t('records.tipQrDirect')}
+                            >
+                              <QrCode className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                              <span className="whitespace-nowrap">{t('records.qr')}</span>
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {/* 下载文件 */}
+                            <button
+                              onClick={() => handleDownloadClick(item)}
+                              className="inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded-lg border border-blue-200/90 text-blue-600 hover:text-blue-700 hover:bg-blue-50/70 bg-white text-[11px] font-medium shadow-xs transition active:scale-95 whitespace-nowrap shrink-0"
+                              title={item.hasPassword ? t('records.tipDownloadPwd') : t('records.tipDownload')}
+                            >
+                              {item.hasPassword ? (
+                                <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                              ) : (
+                                <Download className="w-3.5 h-3.5 shrink-0" />
+                              )}
+                              <span className="whitespace-nowrap">{t('records.download')}</span>
+                            </button>
+
+                            {/* 复制下载链接 */}
+                            <button
+                              onClick={() => handleCopyDownloadLink(item)}
+                              className="inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50/50 bg-white text-[11px] font-medium shadow-xs transition active:scale-95 whitespace-nowrap shrink-0"
+                              title={t('records.tipCopyLink')}
+                            >
+                              {copiedLinkId === item.id ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                  <span className="text-emerald-600 whitespace-nowrap">{t('records.copied')}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Link2 className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                                  <span className="whitespace-nowrap">{t('records.copyLink')}</span>
+                                </>
+                              )}
+                            </button>
+
+                            {/* 显示下载二维码 */}
+                            <button
+                              onClick={() => handleOpenItemQr(item)}
+                              className="inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50/50 bg-white text-[11px] font-medium shadow-xs transition active:scale-95 whitespace-nowrap shrink-0"
+                              title={t('records.tipFileQr')}
+                            >
+                              <QrCode className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                              <span className="whitespace-nowrap">{t('records.qr')}</span>
+                            </button>
+                          </>
+                        )}
+
+                        {/* 删除记录 */}
+                        <button
+                          onClick={() => triggerDeleteOne(item)}
+                          className="inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 text-rose-500 hover:text-rose-600 hover:bg-rose-100/80 border border-rose-100 text-[11px] font-medium transition active:scale-95 whitespace-nowrap shrink-0"
+                          title={t('records.tipDelete')}
+                        >
+                          <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                          <span className="whitespace-nowrap">{t('records.delete')}</span>
+                        </button>
+
+                        {/* 更多详情 */}
+                        <button
+                          onClick={() => handlePreviewClick(item)}
+                          className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition whitespace-nowrap shrink-0"
+                          title={t('records.tipDetails')}
+                        >
+                          <MoreHorizontal className="w-3.5 h-3.5 shrink-0" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* 文本/记录详情预览弹窗 */}
+      {previewItem && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-100 animate-fade-in">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                {getRecordIcon(previewItem)}
+                <h3 className="text-sm font-bold text-slate-800 truncate max-w-[320px]">
+                  {previewItem.title}
+                </h3>
+                {previewItem.hasPassword && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                    <Lock className="w-2.5 h-2.5" />
+                    {t('records.previewEncrypted')}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setPreviewItem(null)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-medium"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 mb-5">
+              <div className="text-xs text-slate-500 flex justify-between flex-wrap gap-2">
+                <span>{t('records.previewType', { type: previewItem.type })}</span>
+                <span className="flex items-center gap-1 font-medium text-slate-700">
+                  <span>{getCharacterInfo(previewItem.senderName || previewItem.nickname).emoji}</span>
+                  <span>{t('records.previewSender', '发送者: {{sender}}', { sender: previewItem.senderName || previewItem.nickname || '海绵宝宝' })}</span>
+                </span>
+                <span>{t('records.previewSize', { size: formatBytes(previewItem.fileSize) })}</span>
+                <span>{t('records.previewTime', { time: formatDisplayTime(previewItem.createdAt) })}</span>
+              </div>
+
+              {previewItem.type === 'image' ? (
+                <div className="flex justify-center p-2 bg-slate-50 rounded-xl border border-slate-200/80 max-h-64 overflow-hidden">
+                  <img
+                    src={getItemDirectUrl(previewItem)}
+                    alt={previewItem.title || previewItem.fileName}
+                    className="max-h-60 object-contain rounded-lg shadow-2xs"
+                  />
+                </div>
+              ) : previewItem.content ? (
+                <div className="bg-slate-50 rounded-xl p-3 text-xs font-mono text-slate-700 max-h-60 overflow-y-auto whitespace-pre-wrap select-text border border-slate-200/80">
+                  {previewItem.content}
+                </div>
+              ) : (
+                <div className="bg-slate-50 rounded-xl p-6 text-center text-xs text-slate-400 border border-dashed border-slate-200">
+                  {previewItem.preview || t('records.previewProtectedPlaceholder')}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              {previewItem.type === 'text' ? (
+                <button
+                  onClick={() => {
+                    handleCopyClick(previewItem);
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-medium hover:bg-blue-700 transition"
+                >
+                  {t('records.copyAll')}
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    handleDownloadClick(previewItem);
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-medium hover:bg-blue-700 transition"
+                >
+                  {t('records.downloadFile')}
+                </button>
+              )}
+              <button
+                onClick={() => setPreviewItem(null)}
+                className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-medium hover:bg-slate-200 transition"
+              >
+                {t('records.close')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 密码验证弹窗 */}
+      <PasswordModal
+        isOpen={pwdModalState.isOpen}
+        onClose={() => setPwdModalState({ isOpen: false, item: null, actionType: 'copy' })}
+        title={pwdModalState.item?.title || ''}
+        actionType={pwdModalState.actionType}
+        onConfirm={handlePasswordConfirm}
+      />
+
+      {/* 操作审计弹窗 */}
+      <AuditLogModal
+        isOpen={auditModalOpen}
+        onClose={() => setAuditModalOpen(false)}
+      />
+
+      {/* 删除操作确认弹窗 */}
+      <DeleteConfirmModal
+        isOpen={deleteModalState.isOpen}
+        onClose={() => setDeleteModalState((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={deleteModalState.onConfirm}
+        title={deleteModalState.title}
+        content={deleteModalState.content}
+        subContent={deleteModalState.subContent}
+        confirmText={deleteModalState.confirmText}
+      />
+
+      {/* 文件专属下载二维码弹窗 */}
+      <FileQrModal
+        isOpen={Boolean(fileQrData)}
+        onClose={() => setFileQrData(null)}
+        item={fileQrData?.item || null}
+        downloadUrl={fileQrData?.downloadUrl || ''}
+      />
+
+      {/* 文本 Markdown 渲染大弹窗 */}
+      {markdownModalItem && (
+        <TextMarkdownModal
+          item={markdownModalItem}
+          isOpen={Boolean(markdownModalItem)}
+          onClose={() => setMarkdownModalItem(null)}
+        />
+      )}
+
+      {/* 密码分享与提取信息小弹窗 */}
+      {shareModalItem && (
+        <ShareInfoModal
+          isOpen={Boolean(shareModalItem)}
+          onClose={() => setShareModalItem(null)}
+          item={shareModalItem}
+          downloadUrl={getItemShareUrl(shareModalItem)}
+          verifyPassword={verifyPassword}
+          onCopyShareLink={onCopyShareLink}
+          onPasswordVerified={(pwd) => {
+            if (shareModalItem) {
+              shareModalItem.password = pwd;
+            }
+          }}
+        />
+      )}
+
+      {/* 增强型清空全部与指定时间删除弹窗 */}
+      <ClearRecordsModal
+        isOpen={clearRecordsModalOpen}
+        onClose={() => setClearRecordsModalOpen(false)}
+        records={records}
+        onConfirm={async (opts) => {
+          await onClearAll(opts);
+        }}
+      />
+    </div>
+  );
+};

@@ -1,0 +1,149 @@
+import fs from 'fs';
+import path from 'path';
+import archiver from 'archiver';
+import { configManager } from '../config/config.manager.js';
+import { STORAGE_FILES_DIRNAME, STORAGE_RECORDS_FILENAME, STORAGE_SETTINGS_FILENAME } from '../../shared/constants.js';
+
+export class StorageService {
+  /**
+   * 获取文件存储根路径
+   */
+  public getFilesDir(): string {
+    const baseDir = configManager.getSettings().storageDir;
+    const filesDir = path.join(baseDir, STORAGE_FILES_DIRNAME);
+    if (!fs.existsSync(filesDir)) {
+      fs.mkdirSync(filesDir, { recursive: true });
+    }
+    return filesDir;
+  }
+
+  /**
+   * 为某条记录创建专用存放路径
+   */
+  public getRecordStoragePath(recordId: string): string {
+    return path.join(this.getFilesDir(), recordId);
+  }
+
+  /**
+   * 删除某条记录关联的物理磁盘文件
+   */
+  public deleteRecordFiles(recordId: string): void {
+    const targetPath = this.getRecordStoragePath(recordId);
+    if (fs.existsSync(targetPath)) {
+      try {
+        fs.rmSync(targetPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+      } catch (err) {
+        console.error(`[StorageService] Failed to delete file for record ${recordId}:`, err);
+      }
+    }
+  }
+
+  /**
+   * 打包某个记录目录为 zip 流下载
+   */
+  public createZipArchiveStream(sourceDir: string, zipName: string, res: any): void {
+    const archive = archiver('zip', {
+      zlib: { level: 6 },
+    });
+
+    res.attachment(zipName);
+
+    archive.on('error', (err) => {
+      console.error('[StorageService] Zip stream error:', err);
+      if (!res.headersSent) {
+        res.status(500).send({ error: 'Failed to compress archive' });
+      }
+    });
+
+    archive.pipe(res);
+    archive.directory(sourceDir, false);
+    archive.finalize();
+  }
+
+  /**
+   * 迁移现有存储目录到新存储目录
+   */
+  public migrateStorage(oldDir: string, newDir: string): { success: boolean; message?: string } {
+    try {
+      if (path.resolve(oldDir) === path.resolve(newDir)) {
+        return { success: true, message: 'Source and target directories are identical' };
+      }
+
+      configManager.ensureStorageDirExists(newDir);
+
+      // 拷贝 records.json
+      const oldRecords = path.join(oldDir, STORAGE_RECORDS_FILENAME);
+      const newRecords = path.join(newDir, STORAGE_RECORDS_FILENAME);
+      if (fs.existsSync(oldRecords)) {
+        fs.copyFileSync(oldRecords, newRecords);
+      }
+
+      // 拷贝 settings.json
+      const oldSettings = path.join(oldDir, STORAGE_SETTINGS_FILENAME);
+      const newSettings = path.join(newDir, STORAGE_SETTINGS_FILENAME);
+      if (fs.existsSync(oldSettings)) {
+        fs.copyFileSync(oldSettings, newSettings);
+      }
+
+      // 拷贝 files 目录内容
+      const oldFiles = path.join(oldDir, STORAGE_FILES_DIRNAME);
+      const newFiles = path.join(newDir, STORAGE_FILES_DIRNAME);
+      if (fs.existsSync(oldFiles)) {
+        if (!fs.existsSync(newFiles)) {
+          fs.mkdirSync(newFiles, { recursive: true });
+        }
+        this.copyFolderRecursive(oldFiles, newFiles);
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      console.error('[StorageService] Migration failed:', err);
+      return { success: false, message: err?.message || 'Migration failed' };
+    }
+  }
+
+  private copyFolderRecursive(source: string, target: string): void {
+    const files = fs.readdirSync(source);
+    for (const file of files) {
+      const curSource = path.join(source, file);
+      const curTarget = path.join(target, file);
+      if (fs.lstatSync(curSource).isDirectory()) {
+        if (!fs.existsSync(curTarget)) {
+          fs.mkdirSync(curTarget, { recursive: true });
+        }
+        this.copyFolderRecursive(curSource, curTarget);
+      } else {
+        fs.copyFileSync(curSource, curTarget);
+      }
+    }
+  }
+
+  /**
+   * 计算指定目录的真实物理大小 (递归字节数)
+   */
+  public getDirectorySize(dirPath: string): number {
+    let size = 0;
+    if (!fs.existsSync(dirPath)) return 0;
+
+    const stats = fs.statSync(dirPath);
+    if (!stats.isDirectory()) return stats.size;
+
+    try {
+      const files = fs.readdirSync(dirPath);
+      for (const file of files) {
+        const fullPath = path.join(dirPath, file);
+        const fileStat = fs.statSync(fullPath);
+        if (fileStat.isDirectory()) {
+          size += this.getDirectorySize(fullPath);
+        } else {
+          size += fileStat.size;
+        }
+      }
+    } catch (e) {
+      console.warn('[StorageService] Error calculating dir size:', e);
+    }
+    return size;
+  }
+}
+
+export const storageService = new StorageService();

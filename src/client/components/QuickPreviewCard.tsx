@@ -1,0 +1,402 @@
+import React, { useState } from 'react';
+import {
+  Clock,
+  ArrowRight,
+  FileText,
+  File,
+  HardDrive,
+  Copy,
+  Check,
+  Download,
+  CalendarDays,
+  FolderArchive,
+  Lock,
+  Image as ImageIcon,
+  Inbox,
+  Eye,
+} from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { ShareItem, SystemStats } from '@shared/types';
+import { formatBytes, formatDisplayTime, getFileTypeLabel } from '../utils/format';
+import { PasswordModal } from './PasswordModal';
+import { TextMarkdownModal } from './TextMarkdownModal';
+import { getCharacterInfo } from '../utils/nickname';
+
+export interface QuickPreviewCardProps {
+  recentRecords: ShareItem[];
+  stats: SystemStats;
+  onScrollToRecords: () => void;
+  onCopyText: (item: ShareItem, customText?: string) => Promise<boolean>;
+  onDownloadFile: (item: ShareItem, password?: string) => void;
+  verifyPassword: (id: string, password: string) => Promise<string>;
+}
+
+export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
+  recentRecords,
+  stats,
+  onScrollToRecords,
+  onCopyText,
+  onDownloadFile,
+  verifyPassword,
+}) => {
+  const { t } = useTranslation();
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [markdownModalItem, setMarkdownModalItem] = useState<ShareItem | null>(null);
+
+  // 密码校验弹窗状态
+  const [pwdModalState, setPwdModalState] = useState<{
+    isOpen: boolean;
+    item: ShareItem | null;
+    actionType: 'copy' | 'download' | 'view_markdown';
+  }>({
+    isOpen: false,
+    item: null,
+    actionType: 'copy',
+  });
+
+  // 发送文字内容，摘录前15个字符作为内容/文件名
+  const getTextDisplayTitle = (item: ShareItem): string => {
+    if (item.type !== 'text') return item.title || item.fileName || t('preview.unknownFile');
+    const raw = item.title || item.content || t('preview.quickText');
+    const oneLine = raw.replace(/\s+/g, ' ').trim();
+    return oneLine.length > 15 ? `${oneLine.substring(0, 15)}...` : oneLine;
+  };
+
+  // 获取图标配置
+  const getItemIcon = (item: ShareItem) => {
+    if (item.type === 'text') {
+      return (
+        <div className="w-8 h-8 rounded-lg bg-sky-100 text-sky-600 flex items-center justify-center shrink-0">
+          <FileText className="w-4 h-4" />
+        </div>
+      );
+    }
+    if (item.type === 'image') {
+      return (
+        <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+          <ImageIcon className="w-4 h-4" />
+        </div>
+      );
+    }
+    if (item.type === 'folder') {
+      return (
+        <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+          <FolderArchive className="w-4 h-4" />
+        </div>
+      );
+    }
+    const ext = (item.extension || '').toLowerCase();
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) {
+      return (
+        <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+          <ImageIcon className="w-4 h-4" />
+        </div>
+      );
+    }
+    return (
+      <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+        <File className="w-4 h-4" />
+      </div>
+    );
+  };
+
+  // 点击复制 (若受密码保护且未解密，弹窗验证；已解密则直接复制)
+  const handleCopyClick = async (item: ShareItem) => {
+    if (item.hasPassword && !item.content) {
+      setPwdModalState({
+        isOpen: true,
+        item,
+        actionType: 'copy',
+      });
+      return;
+    }
+
+    const ok = await onCopyText(item, item.content);
+    if (ok) {
+      setCopiedId(item.id);
+      setTimeout(() => setCopiedId(null), 2000);
+    }
+  };
+
+  // 点击下载
+  const handleDownloadClick = (item: ShareItem) => {
+    if (item.hasPassword) {
+      setPwdModalState({
+        isOpen: true,
+        item,
+        actionType: 'download',
+      });
+      return;
+    }
+    onDownloadFile(item);
+  };
+
+  // 点击查看文本
+  const handleViewClick = (item: ShareItem) => {
+    if (item.hasPassword && !item.content) {
+      setPwdModalState({
+        isOpen: true,
+        item,
+        actionType: 'view_markdown',
+      });
+      return;
+    }
+    setMarkdownModalItem(item);
+  };
+
+  // 密码弹窗确认
+  const handlePasswordConfirm = async (password: string) => {
+    const item = pwdModalState.item;
+    if (!item) return;
+
+    if (pwdModalState.actionType === 'copy') {
+      const decrypted = await verifyPassword(item.id, password);
+      const ok = await onCopyText(item, decrypted);
+      if (ok) {
+        setCopiedId(item.id);
+        setTimeout(() => setCopiedId(null), 2000);
+      }
+    } else if (pwdModalState.actionType === 'download') {
+      // 必须先校验密码，若密码错误抛出异常，由 PasswordModal 捕获并提示重新输入
+      await verifyPassword(item.id, password);
+      onDownloadFile(item, password);
+    } else if (pwdModalState.actionType === 'view_markdown') {
+      const decrypted = await verifyPassword(item.id, password);
+      setMarkdownModalItem({
+        ...item,
+        content: decrypted,
+      });
+    }
+  };
+
+  // 显示最多 3 条记录
+  const displayItems = recentRecords.slice(0, 3);
+  // 不足 3 条时补足的占位槽位数
+  const emptySlotsCount = Math.max(0, 3 - displayItems.length);
+
+  return (
+    <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 flex flex-col justify-between h-full">
+      {/* 头部标题与查看全部 */}
+      <div>
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100/80">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-sky-500" />
+            <h2 className="text-sm font-bold text-slate-800 tracking-tight">{t('preview.title')}</h2>
+            <span className="text-[10px] font-medium bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">
+              {t('preview.recentCount')}
+            </span>
+          </div>
+          <button
+            onClick={onScrollToRecords}
+            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium transition"
+          >
+            {t('preview.viewAll')}
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* 最近 3 条记录列表 */}
+        <div className="py-3 flex flex-col gap-2.5">
+          {displayItems.length === 0 ? (
+            <div className="rounded-xl p-8 bg-slate-50/70 border border-dashed border-slate-200 text-center flex flex-col items-center justify-center">
+              <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-2">
+                <Inbox className="w-5 h-5" />
+              </div>
+              <p className="text-xs font-medium text-slate-500">{t('preview.emptyTitle')}</p>
+              <p className="text-[11px] text-slate-400 mt-1">{t('preview.emptyDesc')}</p>
+            </div>
+          ) : (
+            <>
+              {displayItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="bg-slate-50/80 hover:bg-slate-50 rounded-xl p-2.5 sm:p-3 border border-slate-200/60 transition group flex items-center justify-between gap-3 shadow-none hover:shadow-xs"
+                >
+                  {/* 左侧图标与文本信息 */}
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    {getItemIcon(item)}
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-semibold text-slate-800 truncate" title={item.type === 'text' ? item.content || item.title : item.fileName || item.title}>
+                          {item.type === 'text' ? getTextDisplayTitle(item) : item.fileName || item.title}
+                        </span>
+
+                        {item.hasPassword && (
+                          <span
+                            className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] bg-amber-50 text-amber-700 border border-amber-200 shrink-0"
+                            title={t('preview.passwordProtected')}
+                          >
+                            <Lock className="w-2.5 h-2.5 text-amber-600" />
+                            {t('preview.encrypted')}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-[11px] text-slate-400 truncate mt-0.5 flex items-center gap-1.5">
+                        <span className="font-medium text-slate-600 flex items-center gap-0.5">
+                          <span className="text-xs leading-none">{getCharacterInfo(item.senderName || item.nickname).emoji}</span>
+                          <span>{item.senderName || item.nickname || '海绵宝宝'}</span>
+                        </span>
+                        <span>•</span>
+                        <span>{formatDisplayTime(item.createdAt)}</span>
+                        <span>•</span>
+                        {item.type === 'text' && (
+                          <span className="truncate">
+                            {item.hasPassword
+                              ? t('preview.passwordProtected')
+                              : item.isUrl
+                              ? t('preview.urlLink')
+                              : t('preview.textSummary', { count: (item.content || item.title || '').length })}
+                          </span>
+                        )}
+                        {item.type === 'image' && (
+                          <span>
+                            {formatBytes(item.fileSize)} · {t('preview.image')}
+                          </span>
+                        )}
+                        {item.type === 'file' && (
+                          <span>
+                            {formatBytes(item.fileSize)} · {getFileTypeLabel(item.fileName, item.extension)}
+                          </span>
+                        )}
+                        {item.type === 'folder' && (
+                          <span>
+                            {formatBytes(item.fileSize)} · {t('preview.folderWithCount', { count: item.fileCount || 0 })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 右侧快捷操作按钮 */}
+                  <div className="shrink-0 flex items-center">
+                    {item.type === 'text' ? (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleViewClick(item)}
+                          className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 shadow-sm transition active:scale-95 flex items-center gap-1 text-xs font-medium"
+                          title={item.hasPassword && !item.content ? t('records.tipViewPwd') : t('preview.viewContent')}
+                        >
+                          {item.hasPassword && !item.content ? (
+                            <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          ) : (
+                            <Eye className="w-3.5 h-3.5 shrink-0" />
+                          )}
+                          <span className="text-[11px] hidden sm:inline">{t('preview.view')}</span>
+                        </button>
+                        <button
+                          onClick={() => handleCopyClick(item)}
+                          className={`p-1.5 rounded-lg border transition active:scale-95 flex items-center gap-1 text-xs font-medium ${
+                            copiedId === item.id
+                              ? 'bg-emerald-50 text-emerald-600 border-emerald-200 shadow-sm'
+                              : 'bg-white text-slate-600 hover:text-blue-600 hover:border-blue-200 border-slate-200 shadow-sm'
+                          }`}
+                          title={t('preview.copyContent')}
+                        >
+                          {copiedId === item.id ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span className="text-[11px] hidden sm:inline">{t('preview.copied')}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5 shrink-0" />
+                              <span className="text-[11px] hidden sm:inline">{t('preview.copy')}</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handleDownloadClick(item)}
+                        className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 shadow-sm transition active:scale-95 flex items-center gap-1 text-xs font-medium"
+                        title={item.type === 'folder' ? t('preview.downloadFolder') : t('preview.download')}
+                      >
+                        <Download className="w-3.5 h-3.5 shrink-0" />
+                        <span className="text-[11px] hidden sm:inline">{t('preview.download')}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {/* 当少于 3 条记录时，渲染柔和的虚线占位槽，保持高度稳定美观 */}
+              {Array.from({ length: emptySlotsCount }).map((_, idx) => (
+                <div
+                  key={`empty-slot-${idx}`}
+                  className="rounded-xl p-3 border border-dashed border-slate-200/70 bg-slate-50/30 flex items-center justify-center text-slate-400 text-xs gap-1.5 select-none"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                  <span className="text-[11px] text-slate-400">{t('preview.waiting')}</span>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* 底部 3 项统计卡片 */}
+      <div className="grid grid-cols-3 gap-2.5 pt-3 border-t border-slate-100">
+        {/* 总记录数 */}
+        <div
+          onClick={onScrollToRecords}
+          className="bg-slate-50/80 hover:bg-slate-100/80 rounded-xl p-2.5 border border-slate-200/60 cursor-pointer transition flex items-center justify-between group"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-[10px] text-slate-400 truncate">{t('preview.totalRecords')}</div>
+              <div className="text-sm font-bold text-slate-800 leading-tight">{stats.totalRecords}</div>
+            </div>
+          </div>
+          <span className="text-xs text-slate-300 group-hover:text-slate-500 font-mono transition shrink-0 ml-1">›</span>
+        </div>
+
+        {/* 总文件大小 */}
+        <div className="bg-slate-50/80 rounded-xl p-2.5 border border-slate-200/60 flex items-center justify-between group">
+          <div className="flex items-center gap-2 min-w-0">
+            <HardDrive className="w-4 h-4 text-emerald-500 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-[10px] text-slate-400 truncate">{t('preview.totalStorage')}</div>
+              <div className="text-sm font-bold text-slate-800 leading-tight truncate">
+                {formatBytes(stats.totalStorageBytes)}
+              </div>
+            </div>
+          </div>
+          <span className="text-xs text-slate-300 font-mono shrink-0 ml-1">›</span>
+        </div>
+
+        {/* 今日发送 */}
+        <div className="bg-slate-50/80 rounded-xl p-2.5 border border-slate-200/60 flex items-center justify-between group">
+          <div className="flex items-center gap-2 min-w-0">
+            <CalendarDays className="w-4 h-4 text-indigo-500 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-[10px] text-slate-400 truncate">{t('preview.todaySent')}</div>
+              <div className="text-sm font-bold text-slate-800 leading-tight">{stats.todaySentCount}</div>
+            </div>
+          </div>
+          <span className="text-xs text-slate-300 font-mono shrink-0 ml-1">›</span>
+        </div>
+      </div>
+
+      {/* 密码验证弹窗 */}
+      <PasswordModal
+        isOpen={pwdModalState.isOpen}
+        onClose={() => setPwdModalState({ isOpen: false, item: null, actionType: 'copy' })}
+        title={pwdModalState.item?.title || pwdModalState.item?.fileName || t('preview.protectedRecord')}
+        actionType={pwdModalState.actionType}
+        onConfirm={handlePasswordConfirm}
+      />
+
+      {/* 文本 Markdown 渲染大弹窗 */}
+      {markdownModalItem && (
+        <TextMarkdownModal
+          item={markdownModalItem}
+          isOpen={Boolean(markdownModalItem)}
+          onClose={() => setMarkdownModalItem(null)}
+        />
+      )}
+    </div>
+  );
+};
