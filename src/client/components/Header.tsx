@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Zap,
   Copy,
   Check,
   RotateCw,
@@ -123,10 +122,12 @@ export const Header: React.FC<HeaderProps> = ({
         {/* 左侧：Logo、标题、长连接徽章 */}
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-sky-400 flex items-center justify-center shadow-md shadow-blue-500/20 text-white">
-              <Zap className="w-5 h-5 fill-white stroke-none" />
+            <div className="w-9 h-9 rounded-xl overflow-hidden shadow-md shadow-blue-500/20 flex-shrink-0 select-none">
+              <img src="/favicon.svg" alt="LightDrop Logo" className="w-full h-full object-contain" />
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-800">{t('header.title')}</h1>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 select-none">
+              Light<span className="text-blue-600">Drop</span>
+            </h1>
             {isConnected ? (
               <span
                 className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-600 border border-emerald-200/60"

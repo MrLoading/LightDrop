@@ -273,11 +273,11 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
           <span>{t('header.goHome', '返回 LightDrop 首页')}</span>
         </button>
 
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
-            LD
-          </div>
-          <span className="font-bold text-slate-800 text-sm tracking-tight">LightDrop 快传</span>
+        <div className="flex items-center gap-2 select-none">
+          <img src="/favicon.svg" alt="LightDrop Logo" className="w-6 h-6 rounded-md shadow-2xs object-contain" />
+          <span className="font-bold text-slate-900 text-sm tracking-tight">
+            Light<span className="text-blue-600">Drop</span>
+          </span>
         </div>
       </header>
 

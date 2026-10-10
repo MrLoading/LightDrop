@@ -1,8 +1,10 @@
 <p align="center">
-  <img src="./public/icons/icon-192.png" width="120" height="120" alt="LightDrop Logo" style="border-radius: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./public/logo-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="./public/logo.png">
+    <img src="./public/logo.png" width="380" alt="LightDrop Logo" />
+  </picture>
 </p>
-
-<h1 align="center">⚡ LightDrop</h1>
 
 <p align="center">
   <strong>现代化、极简、高隐私的局域网跨设备文件与文本共享服务</strong><br>
