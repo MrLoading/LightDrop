@@ -19,7 +19,7 @@ import { useTranslation } from 'react-i18next';
 import { NetworkIpInfo } from '@shared/types';
 import { copyToClipboard } from '../utils/clipboard';
 import { changeAppLanguage } from '../i18n';
-import { useNickname } from '../utils/nickname';
+import { useNickname, getCharacterLocalizedName } from '../utils/nickname';
 
 interface HeaderProps {
   accessUrl: string;
@@ -45,18 +45,18 @@ export const Header: React.FC<HeaderProps> = ({
   isConnected = true,
 }) => {
   const { t, i18n } = useTranslation();
-  const { nickname, charInfo, updateNickname, randomizeNickname, allCharacters } = useNickname();
+  const { nickname, displayNickname, charInfo, updateNickname, randomizeNickname, allCharacters } = useNickname();
   const [copied, setCopied] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [nicknameDropdownOpen, setNicknameDropdownOpen] = useState(false);
-  const [inputNickname, setInputNickname] = useState(nickname);
+  const [inputNickname, setInputNickname] = useState(displayNickname);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const nicknameDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setInputNickname(nickname);
-  }, [nickname]);
+    setInputNickname(displayNickname);
+  }, [displayNickname]);
 
   // 点击外部关闭下拉菜单
   useEffect(() => {
@@ -171,7 +171,7 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <span className="text-sm shrink-0 leading-none">{charInfo.emoji}</span>
               <span className="font-semibold text-xs tracking-tight truncate max-w-[85px] sm:max-w-[120px]">
-                {nickname}
+                {displayNickname}
               </span>
               <Edit3 className="w-3 h-3 text-amber-500 group-hover:text-amber-700 transition shrink-0 ml-0.5" />
             </button>
@@ -208,7 +208,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      const next = randomizeNickname();
+                      const next = randomizeNickname(i18n.language);
                       setInputNickname(next);
                     }}
                     className="p-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 active:scale-95 text-amber-700 border border-amber-200/80 transition flex items-center justify-center shrink-0"
@@ -229,20 +229,24 @@ export const Header: React.FC<HeaderProps> = ({
                 <div>
                   <div className="text-[10px] text-slate-400 font-medium mb-1.5 flex items-center justify-between">
                     <span>{t('header.quickPickRole', '海绵宝宝角色快速选择：')}</span>
-                    <span className="text-[9px] text-amber-600 font-normal">点击即选</span>
+                    <span className="text-[9px] text-amber-600 font-normal">{t('header.clickToPick', '点击即选')}</span>
                   </div>
                   <div className="grid grid-cols-3 gap-1 max-h-36 overflow-y-auto custom-scrollbar p-0.5">
                     {allCharacters.map((c) => {
-                      const isCurrent = nickname === c.name;
+                      const localizedName = getCharacterLocalizedName(c, i18n.language);
+                      const isCurrent =
+                        nickname.toLowerCase() === c.name.toLowerCase() ||
+                        nickname.toLowerCase() === c.enName.toLowerCase();
                       return (
                         <button
                           key={c.name}
                           type="button"
                           onClick={() => {
-                            updateNickname(c.name);
-                            setInputNickname(c.name);
+                            updateNickname(localizedName);
+                            setInputNickname(localizedName);
                             setNicknameDropdownOpen(false);
                           }}
+                          title={localizedName}
                           className={`flex items-center gap-1 px-1.5 py-1.5 rounded-lg text-[11px] transition text-left truncate ${
                             isCurrent
                               ? 'bg-amber-100/80 text-amber-900 border border-amber-300/80 font-bold shadow-2xs'
@@ -250,7 +254,7 @@ export const Header: React.FC<HeaderProps> = ({
                           }`}
                         >
                           <span className="text-xs shrink-0">{c.emoji}</span>
-                          <span className="truncate">{c.name}</span>
+                          <span className="truncate">{localizedName}</span>
                         </button>
                       );
                     })}

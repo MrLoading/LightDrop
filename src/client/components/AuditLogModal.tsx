@@ -16,7 +16,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { AuditLogItem, AuditLogResponse } from '@shared/types';
 import { formatDisplayTime } from '../utils/format';
-import { getCharacterInfo } from '../utils/nickname';
+import { getCharacterInfo, getDisplayNickname } from '../utils/nickname';
 
 interface AuditLogModalProps {
   isOpen: boolean;
@@ -24,7 +24,7 @@ interface AuditLogModalProps {
 }
 
 export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [logs, setLogs] = useState<AuditLogItem[]>([]);
   const [isLocalHost, setIsLocalHost] = useState(false);
   const [clientIp, setClientIp] = useState('');
@@ -284,9 +284,9 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose })
                   <tr key={item.id} className="hover:bg-slate-50/80 transition">
                     {/* 操作人 (昵称) */}
                     <td className="py-3 px-3 whitespace-nowrap shrink-0">
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-200/60 max-w-[120px] truncate" title={item.nickname || '海绵宝宝'}>
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-200/60 max-w-[120px] truncate" title={getDisplayNickname(item.nickname, i18n.language)}>
                         <span className="text-xs leading-none shrink-0">{getCharacterInfo(item.nickname).emoji}</span>
-                        <span className="truncate">{item.nickname || '海绵宝宝'}</span>
+                        <span className="truncate">{getDisplayNickname(item.nickname, i18n.language)}</span>
                       </span>
                     </td>
 

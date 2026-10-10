@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 
 export interface SpongeBobCharacter {
   name: string;
@@ -32,6 +34,58 @@ export const NICKNAME_STORAGE_KEY = 'lightdrop_user_nickname';
 const NICKNAME_CHANGE_EVENT = 'lightdrop:nickname-changed';
 
 /**
+ * 判断是否为英文语言环境
+ */
+export function isEnglishLanguage(lang?: string): boolean {
+  if (lang) {
+    return lang.toLowerCase().startsWith('en');
+  }
+  if (typeof window !== 'undefined') {
+    const current = i18n.language || localStorage.getItem('lightdrop_language') || navigator.language;
+    return (current || '').toLowerCase().startsWith('en');
+  }
+  return false;
+}
+
+/**
+ * 根据昵称查找内置的海绵宝宝角色
+ */
+export function getCharacterByNickname(nickname?: string): SpongeBobCharacter | undefined {
+  if (!nickname || !nickname.trim()) {
+    return undefined;
+  }
+  const target = nickname.trim().toLowerCase();
+  return SPONGEBOB_CHARACTERS.find(
+    (c) => c.name.toLowerCase() === target || c.enName.toLowerCase() === target
+  );
+}
+
+/**
+ * 获取角色的本地化显示名称 (中文或英文)
+ */
+export function getCharacterLocalizedName(character: SpongeBobCharacter, lang?: string): string {
+  return isEnglishLanguage(lang) ? character.enName : character.name;
+}
+
+/**
+ * 获取用于展示的昵称：
+ * 若匹配到海绵宝宝内置角色，根据当前语言环境返回中文名或英文名；
+ * 若未传或为空，则返回本地化默认角色名（'海绵宝宝' 或 'SpongeBob'）；
+ * 若用户设置的是自定义昵称，则原样保留输出。
+ */
+export function getDisplayNickname(nickname?: string, lang?: string): string {
+  const isEn = isEnglishLanguage(lang);
+  if (!nickname || !nickname.trim()) {
+    return isEn ? 'SpongeBob' : '海绵宝宝';
+  }
+  const match = getCharacterByNickname(nickname);
+  if (match) {
+    return isEn ? match.enName : match.name;
+  }
+  return nickname.trim();
+}
+
+/**
  * 随机获取一个海绵宝宝角色
  */
 export function getRandomSpongeBobCharacter(): SpongeBobCharacter {
@@ -40,31 +94,35 @@ export function getRandomSpongeBobCharacter(): SpongeBobCharacter {
 }
 
 /**
- * 获取当前用户昵称 (优先从 localStorage 获取，无缓存则随机抽取海绵宝宝角色并持久化)
+ * 获取当前用户昵称 (优先从 localStorage 获取，无缓存则按当前语言环境随机抽取海绵宝宝角色并持久化)
  */
-export function getUserNickname(): string {
+export function getUserNickname(lang?: string): string {
+  const isEn = isEnglishLanguage(lang);
   if (typeof window === 'undefined') {
-    return '海绵宝宝';
+    return isEn ? 'SpongeBob' : '海绵宝宝';
   }
   try {
     const cached = localStorage.getItem(NICKNAME_STORAGE_KEY);
     if (cached && cached.trim()) {
       return cached.trim();
     }
-    // 随机分配海绵宝宝角色
+    // 首次随机分配海绵宝宝角色 (根据系统/存储语言环境)
     const randomChar = getRandomSpongeBobCharacter();
-    localStorage.setItem(NICKNAME_STORAGE_KEY, randomChar.name);
-    return randomChar.name;
+    const initialName = isEn ? randomChar.enName : randomChar.name;
+    localStorage.setItem(NICKNAME_STORAGE_KEY, initialName);
+    return initialName;
   } catch {
-    return '海绵宝宝';
+    return isEn ? 'SpongeBob' : '海绵宝宝';
   }
 }
 
 /**
  * 设置并缓存用户昵称
  */
-export function setUserNickname(nickname: string): string {
-  const trimmed = nickname.trim() || getRandomSpongeBobCharacter().name;
+export function setUserNickname(nickname: string, lang?: string): string {
+  const isEn = isEnglishLanguage(lang);
+  const fallback = isEn ? getRandomSpongeBobCharacter().enName : getRandomSpongeBobCharacter().name;
+  const trimmed = nickname.trim() || fallback;
   try {
     localStorage.setItem(NICKNAME_STORAGE_KEY, trimmed);
     window.dispatchEvent(new CustomEvent(NICKNAME_CHANGE_EVENT, { detail: trimmed }));
@@ -81,9 +139,7 @@ export function getCharacterInfo(nickname?: string): { emoji: string; color: str
   if (!nickname) {
     return { emoji: '🧽', color: 'from-amber-400 to-yellow-500' };
   }
-  const match = SPONGEBOB_CHARACTERS.find(
-    (c) => c.name === nickname || c.enName.toLowerCase() === nickname.toLowerCase()
-  );
+  const match = getCharacterByNickname(nickname);
   if (match) {
     return { emoji: match.emoji, color: match.color };
   }
@@ -92,9 +148,10 @@ export function getCharacterInfo(nickname?: string): { emoji: string; color: str
 }
 
 /**
- * React Hook: 管理与响应昵称变化
+ * React Hook: 管理与响应昵称变化 (支持多语言实时切换)
  */
 export function useNickname() {
+  const { i18n } = useTranslation();
   const [nickname, setNicknameState] = useState<string>(() => getUserNickname());
 
   useEffect(() => {
@@ -117,20 +174,28 @@ export function useNickname() {
     return updated;
   }, []);
 
-  const randomizeNickname = useCallback(() => {
-    let nextChar = getRandomSpongeBobCharacter();
-    // 尽量不随机到当前同一个角色
-    if (nextChar.name === nickname && SPONGEBOB_CHARACTERS.length > 1) {
-      const candidates = SPONGEBOB_CHARACTERS.filter((c) => c.name !== nickname);
-      nextChar = candidates[Math.floor(Math.random() * candidates.length)];
-    }
-    return updateNickname(nextChar.name);
-  }, [nickname, updateNickname]);
+  const randomizeNickname = useCallback(
+    (lang?: string) => {
+      const isEn = isEnglishLanguage(lang || i18n.language);
+      let nextChar = getRandomSpongeBobCharacter();
+      const currentChar = getCharacterByNickname(nickname);
+      // 尽量不随机到当前同一个角色 (无论是中文还是英文名匹配)
+      if (currentChar && SPONGEBOB_CHARACTERS.length > 1) {
+        const candidates = SPONGEBOB_CHARACTERS.filter((c) => c.name !== currentChar.name);
+        nextChar = candidates[Math.floor(Math.random() * candidates.length)];
+      }
+      const nextName = isEn ? nextChar.enName : nextChar.name;
+      return updateNickname(nextName);
+    },
+    [nickname, updateNickname, i18n.language]
+  );
 
   const charInfo = getCharacterInfo(nickname);
+  const displayNickname = getDisplayNickname(nickname, i18n.language);
 
   return {
     nickname,
+    displayNickname,
     charInfo,
     updateNickname,
     randomizeNickname,

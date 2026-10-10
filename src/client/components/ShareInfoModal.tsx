@@ -22,7 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { ShareItem } from '@shared/types';
 import { formatBytes, formatDisplayTime, getFileTypeLabel } from '../utils/format';
 import { copyToClipboard } from '../utils/clipboard';
-import { getCharacterInfo } from '../utils/nickname';
+import { getCharacterInfo, getDisplayNickname } from '../utils/nickname';
 
 interface ShareInfoModalProps {
   isOpen: boolean;
@@ -43,7 +43,7 @@ export const ShareInfoModal: React.FC<ShareInfoModalProps> = ({
   onPasswordVerified,
   onCopyShareLink,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [copiedAll, setCopiedAll] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedPwd, setCopiedPwd] = useState(false);
@@ -129,7 +129,7 @@ export const ShareInfoModal: React.FC<ShareInfoModalProps> = ({
 
   // 一键复制全部信息 (格式化分享文本，包含分享者信息)
   const handleCopyAllInfo = async () => {
-    const sender = item.senderName || item.nickname || '海绵宝宝';
+    const sender = getDisplayNickname(item.senderName || item.nickname, i18n.language);
     const fileName = item.fileName || item.title || '文件';
     const fileSize = formatBytes(item.fileSize);
     const createdAt = formatDisplayTime(item.createdAt);
@@ -221,7 +221,7 @@ export const ShareInfoModal: React.FC<ShareInfoModalProps> = ({
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[11px] text-slate-500">
               <span className="flex items-center gap-1 font-medium text-slate-700 bg-white px-1.5 py-0.2 rounded border border-slate-200/60 shadow-2xs">
                 <span className="text-xs leading-none">{getCharacterInfo(item.senderName || item.nickname).emoji}</span>
-                <span>{item.senderName || item.nickname || '海绵宝宝'}</span>
+                <span>{getDisplayNickname(item.senderName || item.nickname, i18n.language)}</span>
               </span>
               <span className="flex items-center gap-1">
                 <HardDrive className="w-3 h-3 text-slate-400 shrink-0" />

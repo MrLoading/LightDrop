@@ -20,7 +20,7 @@ import { ShareItem, SystemStats } from '@shared/types';
 import { formatBytes, formatDisplayTime, getFileTypeLabel } from '../utils/format';
 import { PasswordModal } from './PasswordModal';
 import { TextMarkdownModal } from './TextMarkdownModal';
-import { getCharacterInfo } from '../utils/nickname';
+import { getCharacterInfo, getDisplayNickname } from '../utils/nickname';
 
 export interface QuickPreviewCardProps {
   recentRecords: ShareItem[];
@@ -39,7 +39,7 @@ export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
   onDownloadFile,
   verifyPassword,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [markdownModalItem, setMarkdownModalItem] = useState<ShareItem | null>(null);
 
@@ -236,7 +236,7 @@ export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
                       <div className="text-[11px] text-slate-400 truncate mt-0.5 flex items-center gap-1.5">
                         <span className="font-medium text-slate-600 flex items-center gap-0.5">
                           <span className="text-xs leading-none">{getCharacterInfo(item.senderName || item.nickname).emoji}</span>
-                          <span>{item.senderName || item.nickname || '海绵宝宝'}</span>
+                          <span>{getDisplayNickname(item.senderName || item.nickname, i18n.language)}</span>
                         </span>
                         <span>•</span>
                         <span>{formatDisplayTime(item.createdAt)}</span>

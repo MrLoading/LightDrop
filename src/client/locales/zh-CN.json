@@ -26,6 +26,8 @@
     "randomizeRole": "随机换一个海绵宝宝角色",
     "saveNickname": "确定",
     "quickPickRole": "海绵宝宝角色快速选择：",
+    "clickToPick": "点击即选",
+    "defaultNickname": "海绵宝宝",
     "nicknameNotice": "该昵称将关联于您发送的新增文件、操作记录以及共享记录中。"
   },
   "send": {

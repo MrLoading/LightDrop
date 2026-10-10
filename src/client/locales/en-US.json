@@ -26,6 +26,8 @@
     "randomizeRole": "Randomize SpongeBob character",
     "saveNickname": "Save",
     "quickPickRole": "Quick pick SpongeBob character:",
+    "clickToPick": "Click to select",
+    "defaultNickname": "SpongeBob",
     "nicknameNotice": "This nickname will be associated with your newly added files, operations, and shared records."
   },
   "send": {

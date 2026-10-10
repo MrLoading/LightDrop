@@ -26,7 +26,7 @@ import { formatBytes, formatDisplayTime, getFileTypeLabel } from '../utils/forma
 import { copyToClipboard } from '../utils/clipboard';
 import { TextReaderView } from './TextReaderView';
 import { DownloadModal } from './DownloadModal';
-import { getUserNickname, getCharacterInfo } from '../utils/nickname';
+import { getUserNickname, getCharacterInfo, getDisplayNickname } from '../utils/nickname';
 
 interface DownloadPasswordPageProps {
   recordId: string;
@@ -37,7 +37,7 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
   recordId,
   onBack,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [record, setRecord] = useState<ShareItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -320,7 +320,7 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
               <div className="flex flex-wrap items-center justify-center gap-1.5 mt-2">
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200/80">
                   <span className="text-xs leading-none">{getCharacterInfo(record.senderName || record.nickname).emoji}</span>
-                  <span>{t('downloadPage.sharedBy', '由 {{name}} 分享', { name: record.senderName || record.nickname || '海绵宝宝' })}</span>
+                  <span>{t('downloadPage.sharedBy', '由 {{name}} 分享', { name: getDisplayNickname(record.senderName || record.nickname, i18n.language) })}</span>
                 </span>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600">
                   <HardDrive className="w-3 h-3 text-slate-400" />
@@ -345,7 +345,7 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
                 <span className="text-slate-400">{t('downloadPage.sharer', '分享人')}</span>
                 <span className="font-medium text-slate-800 flex items-center gap-1">
                   <span>{getCharacterInfo(record.senderName || record.nickname).emoji}</span>
-                  <span>{record.senderName || record.nickname || '海绵宝宝'}</span>
+                  <span>{getDisplayNickname(record.senderName || record.nickname, i18n.language)}</span>
                 </span>
               </div>
               <div className="flex items-center justify-between">

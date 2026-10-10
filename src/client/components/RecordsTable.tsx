@@ -31,7 +31,7 @@ import { FileQrModal } from './FileQrModal';
 import { TextMarkdownModal } from './TextMarkdownModal';
 import { ShareInfoModal } from './ShareInfoModal';
 import { ClearRecordsModal, ClearRecordsOptions } from './ClearRecordsModal';
-import { getCharacterInfo } from '../utils/nickname';
+import { getCharacterInfo, getDisplayNickname } from '../utils/nickname';
 
 interface RecordsTableProps {
   records: ShareItem[];
@@ -72,7 +72,7 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
   verifyPassword,
   onCopyShareLink,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [previewItem, setPreviewItem] = useState<ShareItem | null>(null);
   const [markdownModalItem, setMarkdownModalItem] = useState<ShareItem | null>(null);
@@ -571,12 +571,12 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                       <div className="flex items-center justify-center">
                         <span
                           className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100/90 text-slate-700 border border-slate-200/60 max-w-[130px] truncate"
-                          title={item.senderName || item.nickname || '海绵宝宝'}
+                          title={getDisplayNickname(item.senderName || item.nickname, i18n.language)}
                         >
                           <span className="text-xs leading-none shrink-0">
                             {getCharacterInfo(item.senderName || item.nickname).emoji}
                           </span>
-                          <span className="truncate">{item.senderName || item.nickname || '海绵宝宝'}</span>
+                          <span className="truncate">{getDisplayNickname(item.senderName || item.nickname, i18n.language)}</span>
                         </span>
                       </div>
                     </td>
@@ -785,7 +785,7 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                 <span>{t('records.previewType', { type: previewItem.type })}</span>
                 <span className="flex items-center gap-1 font-medium text-slate-700">
                   <span>{getCharacterInfo(previewItem.senderName || previewItem.nickname).emoji}</span>
-                  <span>{t('records.previewSender', '发送者: {{sender}}', { sender: previewItem.senderName || previewItem.nickname || '海绵宝宝' })}</span>
+                  <span>{t('records.previewSender', '发送者: {{sender}}', { sender: getDisplayNickname(previewItem.senderName || previewItem.nickname, i18n.language) })}</span>
                 </span>
                 <span>{t('records.previewSize', { size: formatBytes(previewItem.fileSize) })}</span>
                 <span>{t('records.previewTime', { time: formatDisplayTime(previewItem.createdAt) })}</span>
