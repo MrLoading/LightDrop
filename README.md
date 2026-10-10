@@ -42,6 +42,7 @@
 ---
 
 ## 💡 项目亮点
+<img width="1174" height="869" alt="image" src="https://github.com/user-attachments/assets/87f2c75d-23c3-48af-b175-85cbe659fe57" />
 
 在跨设备文件与文本互传场景中，现有工具往往存在诸多限制：
 
