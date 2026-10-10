@@ -25,6 +25,7 @@ import { ShareItem } from '@shared/types';
 import { formatBytes, formatDisplayTime, getFileTypeLabel } from '../utils/format';
 import { copyToClipboard } from '../utils/clipboard';
 import { TextReaderView } from './TextReaderView';
+import { DownloadModal } from './DownloadModal';
 import { getUserNickname, getCharacterInfo } from '../utils/nickname';
 
 interface DownloadPasswordPageProps {
@@ -49,8 +50,22 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [unlockedContent, setUnlockedContent] = useState<string>('');
   const [downloadTriggered, setDownloadTriggered] = useState(false);
+  const [downloadModalOpen, setDownloadModalOpen] = useState(false);
+  const [downloadSuccessToast, setDownloadSuccessToast] = useState<string | null>(null);
 
   const passwordInputRef = useRef<HTMLInputElement>(null);
+
+  // 打开下载目录选择弹窗
+  const handleStartDownloadFlow = (pwd?: string) => {
+    if (pwd !== undefined) setPassword(pwd);
+    setDownloadModalOpen(true);
+  };
+
+  const handleDownloadSuccess = (dirName: string, fileName: string) => {
+    setDownloadTriggered(true);
+    setDownloadSuccessToast(t('downloadModal.saveSuccessToast', { dir: dirName, file: fileName }));
+    setTimeout(() => setDownloadSuccessToast(null), 4000);
+  };
 
   // 加载单条记录信息
   const fetchRecord = async () => {
@@ -126,8 +141,8 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
       if (record?.type === 'text') {
         setUnlockedContent(json.content || '');
       } else {
-        // 自动触发文件下载
-        triggerFileDownload(pwdToVerify.trim());
+        // 自动弹出下载目录确认与下载弹窗
+        setDownloadModalOpen(true);
       }
       return true;
     } catch (err: any) {
@@ -357,7 +372,7 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
             {!record.hasPassword && (
               <div className="space-y-3">
                 <button
-                  onClick={() => triggerFileDownload()}
+                  onClick={() => handleStartDownloadFlow()}
                   className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-md shadow-blue-200 transition active:scale-98 flex items-center justify-center gap-2"
                 >
                   <Download className="w-4 h-4" />
@@ -382,7 +397,7 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
                 </div>
 
                 <button
-                  onClick={() => triggerFileDownload(password)}
+                  onClick={() => handleStartDownloadFlow(password)}
                   className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-md shadow-blue-200 transition active:scale-98 flex items-center justify-center gap-2"
                 >
                   <Download className="w-4 h-4" />
@@ -470,6 +485,23 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
       <footer className="max-w-4xl mx-auto w-full text-center pt-6 text-[11px] text-slate-400">
         LightDrop · 极速局域网跨设备文件传输与共享服务
       </footer>
+
+      {/* 悬浮成功提示 */}
+      {downloadSuccessToast && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-slate-900/90 backdrop-blur-md text-white px-4 py-2 rounded-xl text-xs font-medium shadow-xl border border-slate-700/60 flex items-center gap-2 animate-bounce">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>{downloadSuccessToast}</span>
+        </div>
+      )}
+
+      {/* 本机下载目录选择与下载弹窗 */}
+      <DownloadModal
+        isOpen={downloadModalOpen}
+        item={record}
+        password={password}
+        onClose={() => setDownloadModalOpen(false)}
+        onSuccess={handleDownloadSuccess}
+      />
     </div>
   );
 };

@@ -415,6 +415,28 @@
     "deleting": "正在清理...",
     "confirmAll": "确认全部清空 ({{count}} 条)",
     "confirmByTime": "确认清理 ({{count}} 条)"
+  },
+  "downloadModal": {
+    "title": "下载文件",
+    "subtitle": "选择或确认下载保存目录",
+    "folderZipBadge": "打包为 ZIP",
+    "saveDir": "本机保存目录",
+    "savedDirBadge": "上次使用的目录",
+    "readingSavedDir": "正在读取浏览器已记住的目录...",
+    "noDirChosen": "尚未选择本机目录 (首次需指定)",
+    "dirTip": "浏览器已缓存此目录，下次默认显示，可随时修改",
+    "firstChooseTip": "选择后将永久缓存，后续下载免重复选择",
+    "changeDir": "更改目录",
+    "selectDir": "选择目录",
+    "unsupportedBadge": "系统默认下载目录 (浏览器托管)",
+    "unsupportedTip": "当前网络环境（非 HTTPS 局域网）或当前浏览器不支持直接选取物理文件夹，文件将由浏览器默认下载管理器保存。",
+    "downloading": "正在下载并保存至本地...",
+    "downloadFailed": "下载失败",
+    "changeDirFailed": "选择目录失败",
+    "btnCancel": "取消",
+    "btnConfirm": "确认下载",
+    "btnSelectAndDownload": "选择目录并下载",
+    "saveSuccessToast": "已成功保存「{{file}}」至「{{dir}}」目录"
   }
 }
 

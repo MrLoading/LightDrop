@@ -450,6 +450,26 @@ export const SendCard: React.FC<SendCardProps> = ({
     const clipboardData = e.clipboardData;
     if (!clipboardData) return;
 
+    // 关键修复：同步检查剪贴板是否携带文件、图像或本地操作系统文件路径
+    // 必须在任何 await 异步之前同步执行 e.preventDefault()，防止浏览器原生将文件名文本粘贴进 textarea
+    const hasFiles = Boolean(
+      (clipboardData.files && clipboardData.files.length > 0) ||
+      (clipboardData.items && Array.from(clipboardData.items).some((item) => item.kind === 'file')) ||
+      (clipboardData.types && (clipboardData.types.includes('Files') || Array.from(clipboardData.types).includes('Files')))
+    );
+
+    const pastedText = clipboardData.getData('text/plain');
+    const isFileText = Boolean(
+      pastedText &&
+      !pastedText.startsWith('http://') &&
+      !pastedText.startsWith('https://') &&
+      isLocalFileOrPathText(pastedText)
+    );
+
+    if (hasFiles || isFileText) {
+      e.preventDefault();
+    }
+
     // 1. 深度探测并提取真实文件与文件夹条目
     const { validFiles, detectedDirectories } = await extractClipboardFiles(clipboardData);
 
@@ -481,9 +501,8 @@ export const SendCard: React.FC<SendCardProps> = ({
       // ignore
     }
 
-    // 3. 检查纯文本内容：
-    const pastedText = clipboardData.getData('text/plain');
-    if (pastedText && isLocalFileOrPathText(pastedText)) {
+    // 3. 检查纯文本内容 (如果之前探测到是本地路径字符串但无二进制流)
+    if (isFileText && pastedText) {
       // 用户在操作系统复制了本地文件，但当前浏览器沙箱由于权限未提供文件二进制流，仅给出了文件名
       e.preventDefault();
       showToast('error', t('send.errClipboardLocalFile', { name: pastedText.trim() }));

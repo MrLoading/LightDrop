@@ -7,9 +7,10 @@ import { RecordsTable } from './components/RecordsTable';
 import { Footer } from './components/Footer';
 import { SettingsModal } from './components/SettingsModal';
 import { QrCodeModal } from './components/QrCodeModal';
+import { DownloadModal } from './components/DownloadModal';
 import { useRecords } from './hooks/useRecords';
 import { useWebSocket } from './hooks/useWebSocket';
-import { WsMessage } from '@shared/types';
+import { ShareItem, WsMessage } from '@shared/types';
 
 export const App: React.FC = () => {
   const { t } = useTranslation();
@@ -46,6 +47,24 @@ export const App: React.FC = () => {
   const [qrCodeOpen, setQrCodeOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [incomingToast, setIncomingToast] = useState<string | null>(null);
+
+  // 本机下载目录弹窗与保存状态
+  const [downloadModalItem, setDownloadModalItem] = useState<{
+    item: ShareItem;
+    password?: string;
+  } | null>(null);
+
+  const handleOpenDownloadModal = useCallback((item: ShareItem, password?: string) => {
+    setDownloadModalItem({ item, password });
+  }, []);
+
+  const handleDownloadSuccess = useCallback(
+    (dirName: string, fileName: string) => {
+      setIncomingToast(t('downloadModal.saveSuccessToast', { dir: dirName, file: fileName }));
+      setTimeout(() => setIncomingToast(null), 3500);
+    },
+    [t]
+  );
 
   // 默认访问 IP 持久化缓存到当前浏览器 localStorage
   const PREFERRED_IP_KEY = 'lightdrop_preferred_ip_url';
@@ -171,7 +190,7 @@ export const App: React.FC = () => {
               stats={stats}
               onScrollToRecords={scrollToRecords}
               onCopyText={copyRecordContent}
-              onDownloadFile={downloadRecord}
+              onDownloadFile={handleOpenDownloadModal}
               verifyPassword={verifyPassword}
             />
           </div>
@@ -190,7 +209,7 @@ export const App: React.FC = () => {
           toggleSelect={toggleSelect}
           toggleSelectAll={toggleSelectAll}
           onCopyText={copyRecordContent}
-          onDownload={downloadRecord}
+          onDownload={handleOpenDownloadModal}
           onDeleteOne={deleteRecord}
           onBatchDelete={deleteBatch}
           onClearAll={clearAllRecords}
@@ -219,6 +238,15 @@ export const App: React.FC = () => {
         accessUrl={activeUrl}
         ipList={stats.ipList || []}
         onSelectUrl={handleSelectDefaultUrl}
+      />
+
+      {/* 本机下载目录选择与下载弹窗 */}
+      <DownloadModal
+        isOpen={Boolean(downloadModalItem)}
+        item={downloadModalItem?.item || null}
+        password={downloadModalItem?.password}
+        onClose={() => setDownloadModalItem(null)}
+        onSuccess={handleDownloadSuccess}
       />
     </div>
   );

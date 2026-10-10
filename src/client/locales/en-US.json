@@ -415,6 +415,28 @@
     "deleting": "Clearing...",
     "confirmAll": "Confirm Clear All ({{count}} records)",
     "confirmByTime": "Confirm Clear ({{count}} records)"
+  },
+  "downloadModal": {
+    "title": "Download File",
+    "subtitle": "Select or confirm the download directory",
+    "folderZipBadge": "Packaged as ZIP",
+    "saveDir": "Local Save Directory",
+    "savedDirBadge": "Last Used Directory",
+    "readingSavedDir": "Reading cached directory from browser...",
+    "noDirChosen": "No local directory selected yet (required for first download)",
+    "dirTip": "Browser has cached this directory. Defaults to this next time, change anytime.",
+    "firstChooseTip": "Cached permanently after selection for quick subsequent downloads",
+    "changeDir": "Change Directory",
+    "selectDir": "Select Directory",
+    "unsupportedBadge": "System Default Directory (Browser Managed)",
+    "unsupportedTip": "Current network (non-HTTPS LAN) or browser does not support folder picker. File will be downloaded by the browser's default download manager.",
+    "downloading": "Downloading and saving locally...",
+    "downloadFailed": "Download failed",
+    "changeDirFailed": "Failed to select directory",
+    "btnCancel": "Cancel",
+    "btnConfirm": "Confirm Download",
+    "btnSelectAndDownload": "Select Directory & Download",
+    "saveSuccessToast": "Successfully saved \"{{file}}\" to \"{{dir}}\""
   }
 }
 
