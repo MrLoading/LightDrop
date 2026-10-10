@@ -42,6 +42,7 @@
 ---
 
 ## 💡 Why EasyDrop?
+<img width="1179" height="872" alt="image" src="https://github.com/user-attachments/assets/dc5ee901-535b-4c2f-b39a-4027de76c7cc" />
 
 Transferring files and text snippets between diverse devices on a local network has traditionally been frustrating:
 
