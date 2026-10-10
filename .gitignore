@@ -19,7 +19,7 @@ pnpm-debug.log*
 .env
 .env.*
 *.local
-easydrop.config.json
+lightdrop.config.json
 
 # Runtime data & uploads
 data/*

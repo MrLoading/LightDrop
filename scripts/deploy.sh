@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# EasyDrop 构建并部署脚本 (Build & Deploy Script)
+# LightDrop 构建并部署脚本 (Build & Deploy Script)
 # 支持：
 # 1. 指定部署方式：docker (容器化) | systemd (系统服务) | pm2 (进程管理) | standalone (独立后台进程)
-# 2. 工作路径：默认 /var/lib/easydrop，不存在则自动创建
+# 2. 工作路径：默认 /var/lib/lightdrop，不存在则自动创建
 # 3. 安装语言：默认中文，支持选择英文
 # 4. 在 <工作路径>/runinfo 目录下创建 .json 文件持久化记录运行信息
 # 5. 优雅终端交互、步骤进度输出及最终状态看板
@@ -21,7 +21,7 @@ if [ -f "${SCRIPT_DIR}/common.sh" ]; then
 fi
 
 # ----------------- 默认配置 -----------------
-DEFAULT_WORK_DIR="/var/lib/easydrop"
+DEFAULT_WORK_DIR="/var/lib/lightdrop"
 WORK_DIR="${DEFAULT_WORK_DIR}"
 DEPLOY_MODE="" # 未指定时若交互模式则引导选择，非交互则默认 docker (或 fallback standalone)
 LANG_OPT="zh"  # 默认中文
@@ -30,10 +30,10 @@ DATA_DIR=""
 IMAGE_TAR=""
 SKIP_BUILD=false
 AUTO_YES=false
-CONTAINER_NAME="easydrop"
-IMAGE_NAME="easydrop:latest"
-SERVICE_NAME="easydrop.service"
-PM2_NAME="easydrop"
+CONTAINER_NAME="lightdrop"
+IMAGE_NAME="lightdrop:latest"
+SERVICE_NAME="lightdrop.service"
+PM2_NAME="lightdrop"
 VERSION="1.0.0"
 
 if [ -f "${REPO_ROOT}/package.json" ]; then
@@ -45,7 +45,7 @@ fi
 show_help() {
   if [ "$LANG_OPT" = "en" ]; then
     cat <<EOF
-EasyDrop Build & Deploy Tool - v${VERSION}
+LightDrop Build & Deploy Tool - v${VERSION}
 
 Usage:
   ./deploy.sh [OPTIONS]
@@ -66,14 +66,14 @@ Options:
   -h, --help              Show this help information
 
 Examples:
-  ./deploy.sh                                   # Interactive deployment wizard
-  ./deploy.sh -m docker -w /var/lib/easydrop    # Deploy via Docker to /var/lib/easydrop
-  ./deploy.sh -m standalone -p 9000 -l en       # Deploy standalone process on port 9000 in English
-  ./deploy.sh --mode docker --image-tar pkg.tar # Deploy directly from prebuilt Docker tar
+  ./deploy.sh                                    # Interactive deployment wizard
+  ./deploy.sh -m docker -w /var/lib/lightdrop    # Deploy via Docker to /var/lib/lightdrop
+  ./deploy.sh -m standalone -p 9000 -l en        # Deploy standalone process on port 9000 in English
+  ./deploy.sh --mode docker --image-tar pkg.tar  # Deploy directly from prebuilt Docker tar
 EOF
   else
     cat <<EOF
-EasyDrop 构建并部署工具 - v${VERSION}
+LightDrop 构建并部署工具 - v${VERSION}
 
 用法:
   ./deploy.sh [选项]
@@ -94,10 +94,10 @@ EasyDrop 构建并部署工具 - v${VERSION}
   -h, --help              显示此帮助信息
 
 示例:
-  ./deploy.sh                                   # 启动交互式引导部署
-  ./deploy.sh -m docker -w /var/lib/easydrop    # 容器化部署至默认工作目录
-  ./deploy.sh -m standalone -p 9000             # 以原生后台服务模式部署在 9000 端口
-  ./deploy.sh -m docker --image-tar image.tar   # 从预打包的镜像 tar 文件直接导入并启动
+  ./deploy.sh                                    # 启动交互式引导部署
+  ./deploy.sh -m docker -w /var/lib/lightdrop    # 容器化部署至默认工作目录
+  ./deploy.sh -m standalone -p 9000              # 以原生后台服务模式部署在 9000 端口
+  ./deploy.sh -m docker --image-tar image.tar    # 从预打包的镜像 tar 文件直接导入并启动
 EOF
   fi
   exit 0
@@ -213,7 +213,7 @@ if is_interactive; then
     esac
   fi
 
-  # 3. 工作路径确认 (默认 /var/lib/easydrop)
+  # 3. 工作路径确认 (默认 /var/lib/lightdrop)
   if [ "$WORK_DIR" = "$DEFAULT_WORK_DIR" ]; then
     if [ "$LANG_OPT" = "en" ]; then
       read -r -p "Working directory [Default: ${DEFAULT_WORK_DIR}]: " input_workdir
@@ -253,17 +253,17 @@ if [ -z "$DATA_DIR" ]; then
 fi
 
 RUNINFO_DIR="${WORK_DIR}/runinfo"
-RUNINFO_FILE="${RUNINFO_DIR}/easydrop-runinfo.json"
+RUNINFO_FILE="${RUNINFO_DIR}/lightdrop-runinfo.json"
 APP_DIR="${WORK_DIR}/app"
 LOG_DIR="${WORK_DIR}/logs"
-PID_FILE="${RUNINFO_DIR}/easydrop.pid"
+PID_FILE="${RUNINFO_DIR}/lightdrop.pid"
 
 # ----------------- 打印部署横幅 -----------------
 echo ""
 if [ "$LANG_OPT" = "en" ]; then
-  print_banner "EasyDrop Deployment System v${VERSION}" "Mode: ${DEPLOY_MODE} | Target: ${WORK_DIR}"
+  print_banner "LightDrop Deployment System v${VERSION}" "Mode: ${DEPLOY_MODE} | Target: ${WORK_DIR}"
 else
-  print_banner "EasyDrop 自动化构建部署引擎 v${VERSION}" "部署模式: ${DEPLOY_MODE} | 工作路径: ${WORK_DIR}"
+  print_banner "LightDrop 自动化构建部署引擎 v${VERSION}" "部署模式: ${DEPLOY_MODE} | 工作路径: ${WORK_DIR}"
 fi
 
 # ----------------- 步骤 1: 检查环境并初始化工作目录 -----------------
@@ -334,8 +334,8 @@ if [ "$DEPLOY_MODE" != "docker" ]; then
     cp "${REPO_ROOT}/pnpm-lock.yaml" "${APP_DIR}/"
   fi
 
-  # 写入工作目录专属的引导配置文件 easydrop.config.json
-  cat <<BOOTSTRAP_JSON > "${APP_DIR}/easydrop.config.json"
+  # 写入工作目录专属的引导配置文件 lightdrop.config.json
+  cat <<BOOTSTRAP_JSON > "${APP_DIR}/lightdrop.config.json"
 {
   "storageDir": "${DATA_DIR}",
   "port": ${PORT}
@@ -351,9 +351,9 @@ fi
 
 # ----------------- 步骤 4: 执行具体模式部署 -----------------
 if [ "$LANG_OPT" = "en" ]; then
-  log_step "4/5" "Starting EasyDrop service via [${DEPLOY_MODE}]..."
+  log_step "4/5" "Starting LightDrop service via [${DEPLOY_MODE}]..."
 else
-  log_step "4/5" "以 [${DEPLOY_MODE}] 方式启动 EasyDrop 传输服务..."
+  log_step "4/5" "以 [${DEPLOY_MODE}] 方式启动 LightDrop 传输服务..."
 fi
 
 case "$DEPLOY_MODE" in
@@ -420,7 +420,7 @@ case "$DEPLOY_MODE" in
     log_info "生成 Systemd 单元配置文件: ${SERVICE_PATH}..."
     cat <<SYSTEMD_UNIT | sudo tee "${SERVICE_PATH}" >/dev/null
 [Unit]
-Description=EasyDrop LAN File Sharing Service
+Description=LightDrop LAN File Sharing Service
 After=network.target
 
 [Service]
@@ -489,7 +489,7 @@ SYSTEMD_UNIT
 
     sleep 1.5
     if kill -0 "$APP_PID" 2>/dev/null; then
-      log_success "EasyDrop 独立后台进程已成功启动 (PID: ${APP_PID})"
+      log_success "LightDrop 独立后台进程已成功启动 (PID: ${APP_PID})"
     else
       log_error "独立进程启动失败，错误日志如下:"
       cat "${LOG_DIR}/app.log" || true
@@ -518,7 +518,7 @@ CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 # 严格创建 runinfo JSON 文件
 cat <<EOF > "${RUNINFO_FILE}"
 {
-  "appName": "easydrop",
+  "appName": "lightdrop",
   "version": "${VERSION}",
   "deployMode": "${DEPLOY_MODE}",
   "language": "${LANG_OPT}",
@@ -548,9 +548,9 @@ log_success "运行记录已写入: ${RUNINFO_FILE}"
 # ----------------- 优雅最终状态信息卡片 -----------------
 echo -e "\n${GREEN}${BOLD}════════════════════════════════════════════════════════════════${RESET}"
 if [ "$LANG_OPT" = "en" ]; then
-  echo -e " ${BOLD}${GREEN}✔ EASYDROP DEPLOYMENT COMPLETED SUCCESSFULLY${RESET}"
+  echo -e " ${BOLD}${GREEN}✔ LIGHTDROP DEPLOYMENT COMPLETED SUCCESSFULLY${RESET}"
 else
-  echo -e " ${BOLD}${GREEN}✔ EasyDrop 构建并部署作业顺利完成${RESET}"
+  echo -e " ${BOLD}${GREEN}✔ LightDrop 构建并部署作业顺利完成${RESET}"
 fi
 echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${RESET}"
 

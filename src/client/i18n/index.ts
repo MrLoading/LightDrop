@@ -14,7 +14,7 @@ export const resources = {
   },
 } as const;
 
-export const LANGUAGE_STORAGE_KEY = 'easydrop_language';
+export const LANGUAGE_STORAGE_KEY = 'lightdrop_language';
 
 i18n
   .use(LanguageDetector)

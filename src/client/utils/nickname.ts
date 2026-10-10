@@ -28,8 +28,8 @@ export const SPONGEBOB_CHARACTERS: SpongeBobCharacter[] = [
   { name: '弗雷德', enName: 'Fred (My Leg)', emoji: '🦵', color: 'from-amber-600 to-stone-500' },
 ];
 
-export const NICKNAME_STORAGE_KEY = 'easydrop_user_nickname';
-const NICKNAME_CHANGE_EVENT = 'easydrop:nickname-changed';
+export const NICKNAME_STORAGE_KEY = 'lightdrop_user_nickname';
+const NICKNAME_CHANGE_EVENT = 'lightdrop:nickname-changed';
 
 /**
  * 随机获取一个海绵宝宝角色

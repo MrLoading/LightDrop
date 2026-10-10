@@ -1,6 +1,6 @@
 {
   "header": {
-    "title": "EasyDrop",
+    "title": "LightDrop",
     "subtitle": "任何访问者都可复制文本、下载文件，无需登录。",
     "connected": "长连接已在线",
     "reconnecting": "正在重连长连接...",
@@ -208,14 +208,14 @@
     "title": "系统与存储设置",
     "subtitle": "配置底层存储目录、自动清理、语言与文件限制",
     "language": "界面语言",
-    "languageDesc": "选择 EasyDrop 界面显示的默认语言",
+    "languageDesc": "选择 LightDrop 界面显示的默认语言",
     "langZh": "简体中文 (Chinese)",
     "langEn": "English (英文)",
     "langAuto": "跟随系统 (Auto Detect)",
     "storageDir": "数据存储目录 (绝对路径或相对路径)",
     "testDir": "检测可用性",
     "testing": "检测中...",
-    "dirPlaceholder": "./data 或 /Users/user/easydrop_data",
+    "dirPlaceholder": "./data 或 /Users/user/lightdrop_data",
     "storageTip": "所有存储相关的记录都通过此目录下的 records.json 结构化文件与 files/ 目录进行维护，零外部依赖，极速轻量。",
     "migrateData": "变更目录时自动迁移历史记录与文件至新目录",
     "storageUsage": "当前存储空间占用",
@@ -301,7 +301,7 @@
     "inputTextLabel": "请输入访问密码以解锁阅读",
     "submitVerify": "验证并下载文件",
     "submitUnlockText": "验证密码并开始阅读",
-    "backHomeHint": "点击右上角返回 EasyDrop 首页"
+    "backHomeHint": "点击右上角返回 LightDrop 首页"
   },
   "passwordModal": {
     "title": "请输入访问密码",
@@ -327,7 +327,7 @@
     "copy": "复制",
     "copied": "已复制",
     "downloadMd": "下载为 .md",
-    "footerEngine": "EasyDrop Markdown 渲染引擎 · 支持 GFM 语法",
+    "footerEngine": "LightDrop Markdown 渲染引擎 · 支持 GFM 语法",
     "escTip": "按 ESC 或点击右上角 X 关闭",
     "dialogTitle": "导出 Markdown 文件",
     "dialogSubtitle": "请为下载的 .md 文件命名",

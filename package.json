@@ -1,7 +1,7 @@
 {
-  "name": "easydrop",
+  "name": "lightdrop",
   "version": "1.0.0",
-  "description": "EasyDrop - 基于 TypeScript 的轻量高效跨设备文件与文本共享服务 (PWA 支持)",
+  "description": "LightDrop - 基于 TypeScript 的轻量高效跨设备文件与文本共享服务 (PWA 支持)",
   "main": "dist/server/index.js",
   "type": "module",
   "scripts": {
@@ -13,10 +13,10 @@
     "build": "pnpm build:client && pnpm build:server",
     "start": "node dist/server/index.js",
     "pm2:start": "pm2 start ecosystem.config.cjs",
-    "pm2:stop": "pm2 stop easydrop",
-    "pm2:restart": "pm2 restart easydrop",
-    "pm2:logs": "pm2 logs easydrop",
-    "deploy": "pnpm build && (pm2 restart easydrop || pm2 start ecosystem.config.cjs)",
+    "pm2:stop": "pm2 stop lightdrop",
+    "pm2:restart": "pm2 restart lightdrop",
+    "pm2:logs": "pm2 logs lightdrop",
+    "deploy": "pnpm build && (pm2 restart lightdrop || pm2 start ecosystem.config.cjs)",
     "deploy:service": "bash scripts/deploy.sh",
     "package": "bash scripts/package.sh",
     "uninstall:service": "bash scripts/uninstall.sh",
@@ -24,7 +24,7 @@
   },
   "keywords": [
     "airdrop",
-    "easydrop",
+    "lightdrop",
     "lan-sharing",
     "pwa",
     "typescript",

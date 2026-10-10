@@ -29,7 +29,7 @@ server.listen(port, host, () => {
   console.log(`
 ╔══════════════════════════════════════════════════════════════╗
 ║                                                              ║
-║   ⚡ EasyDrop - 局域网快传服务已就绪 (100% TypeScript)       ║
+║   ⚡ LightDrop - 局域网快传服务已就绪 (100% TypeScript)      ║
 ║                                                              ║
 ║   ► 本地访问:    http://localhost:${port}                       ║
 ║   ► 局域网访问:  http://${localIp}:${port}                   ║
@@ -42,7 +42,7 @@ server.listen(port, host, () => {
 
 // 优雅停机
 const handleShutdown = () => {
-  console.log('\nShutting down EasyDrop gracefully...');
+  console.log('\nShutting down LightDrop gracefully...');
   cleanupService.stop();
   server.close(() => {
     console.log('Server stopped.');

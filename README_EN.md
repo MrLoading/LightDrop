@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="./public/icons/icon-192x192.png" width="120" height="120" alt="EasyDrop Logo" style="border-radius: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);" />
+  <img src="./public/icons/icon-192x192.png" width="120" height="120" alt="LightDrop Logo" style="border-radius: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);" />
 </p>
 
-<h1 align="center">⚡ EasyDrop</h1>
+<h1 align="center">⚡ LightDrop</h1>
 
 <p align="center">
   <strong>Modern, Minimalist, Privacy-First Local Network (LAN) File & Text Sharing Service</strong><br>
@@ -26,7 +26,7 @@
 
 ## 📖 Table of Contents
 
-- [💡 Why EasyDrop?](#-why-easydrop)
+- [💡 Why LightDrop?](#-why-lightdrop)
 - [🌟 Key Features](#-key-features)
 - [🚀 Quick Start](#-quick-start)
   - [Method 1: Docker Compose (Recommended)](#method-1-docker-compose-recommended)
@@ -41,12 +41,12 @@
 
 ---
 
-## 💡 Why EasyDrop?
+## 💡 Why LightDrop?
 <img width="1179" height="872" alt="image" src="https://github.com/user-attachments/assets/dc5ee901-535b-4c2f-b39a-4027de76c7cc" />
 
 Transferring files and text snippets between diverse devices on a local network has traditionally been frustrating:
 
-| Solution | Major Pain Points | EasyDrop Advantages |
+| Solution | Major Pain Points | LightDrop Advantages |
 | :--- | :--- | :--- |
 | **Instant Messengers (Slack, WeChat, Telegram)** | File size quotas, media compression, data uploaded to public clouds | **Maxes out Gigabit LAN bandwidth**, 100% data stays strictly on your local device |
 | **Apple AirDrop** | Restricted strictly to Apple devices (iOS/macOS) | **Zero client installation**, works on any device with a modern browser |
@@ -117,9 +117,9 @@ Transferring files and text snippets between diverse devices on a local network 
 version: '3.8'
 
 services:
-  easydrop:
+  lightdrop:
     image: node:22-alpine
-    container_name: easydrop
+    container_name: lightdrop
     restart: unless-stopped
     working_dir: /app
     volumes:
@@ -140,7 +140,7 @@ Visit `http://<YOUR_LAN_IP>:8080` in your browser.
 
 ### Method 2: Automated Deployment Script (`deploy.sh`)
 
-EasyDrop includes a battle-tested cross-platform management script:
+LightDrop includes a battle-tested cross-platform management script:
 
 ```bash
 # Grant execution permissions
@@ -177,10 +177,10 @@ pnpm dev
 
 ## 📐 Architecture & Tech Stack
 
-EasyDrop is built as a **full-stack TypeScript monorepo**, sharing data types between frontend and backend:
+LightDrop is built as a **full-stack TypeScript monorepo**, sharing data types between frontend and backend:
 
 ```text
-EasyDrop/
+LightDrop/
 ├── src/
 │   ├── shared/                # Protocol layer: Shared TypeScript interfaces & types
 │   ├── server/                # Backend: Node.js + Express + WebSocket + Atomic storage
@@ -245,7 +245,7 @@ No arbitrary limits out of the box. Streaming transfers ensure minimal memory fo
 <details>
 <summary><strong>Q: Will NAS storage path settings be lost after restarting?</strong></summary>
 
-No. `easydrop.config.json` in the root folder automatically records the active storage directory and re-applies it during bootstrap.
+No. `lightdrop.config.json` in the root folder automatically records the active storage directory and re-applies it during bootstrap.
 </details>
 
 <details>

@@ -7,7 +7,7 @@ import { Request, Response, NextFunction } from 'express';
 import { configManager } from '../config/config.manager.js';
 
 // 临时上传缓冲目录
-const tempUploadDir = path.join(os.tmpdir(), 'easydrop-temp-uploads');
+const tempUploadDir = path.join(os.tmpdir(), 'lightdrop-temp-uploads');
 if (!fs.existsSync(tempUploadDir)) {
   fs.mkdirSync(tempUploadDir, { recursive: true });
 }

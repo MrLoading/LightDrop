@@ -48,7 +48,7 @@ export const App: React.FC = () => {
   const [incomingToast, setIncomingToast] = useState<string | null>(null);
 
   // 默认访问 IP 持久化缓存到当前浏览器 localStorage
-  const PREFERRED_IP_KEY = 'easydrop_preferred_ip_url';
+  const PREFERRED_IP_KEY = 'lightdrop_preferred_ip_url';
   const [selectedAccessUrl, setSelectedAccessUrl] = useState<string>(() => {
     try {
       return localStorage.getItem(PREFERRED_IP_KEY) || '';

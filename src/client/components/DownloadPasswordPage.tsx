@@ -118,7 +118,7 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
 
       // 验证通过，记录至 sessionStorage 避免刷新丢失
       try {
-        sessionStorage.setItem(`easydrop_pwd_${recordId}`, pwdToVerify.trim());
+        sessionStorage.setItem(`lightdrop_pwd_${recordId}`, pwdToVerify.trim());
       } catch (_) {}
 
       setIsUnlocked(true);
@@ -146,7 +146,7 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
       const urlPwd = queryParams.get('pwd') || queryParams.get('password');
       let cachedPwd = '';
       try {
-        cachedPwd = sessionStorage.getItem(`easydrop_pwd_${recordId}`) || '';
+        cachedPwd = sessionStorage.getItem(`lightdrop_pwd_${recordId}`) || '';
       } catch (_) {}
 
       const autoPwd = urlPwd || cachedPwd;
@@ -255,14 +255,14 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
           className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-200/90 text-slate-700 hover:text-blue-600 hover:border-blue-200 shadow-2xs text-xs font-medium transition active:scale-95"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          <span>{t('header.goHome', '返回 EasyDrop 首页')}</span>
+          <span>{t('header.goHome', '返回 LightDrop 首页')}</span>
         </button>
 
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
-            ED
+            LD
           </div>
-          <span className="font-bold text-slate-800 text-sm tracking-tight">EasyDrop 快传</span>
+          <span className="font-bold text-slate-800 text-sm tracking-tight">LightDrop 快传</span>
         </div>
       </header>
 
@@ -468,7 +468,7 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
 
       {/* 底部版权 */}
       <footer className="max-w-4xl mx-auto w-full text-center pt-6 text-[11px] text-slate-400">
-        EasyDrop · 极速局域网跨设备文件传输与共享服务
+        LightDrop · 极速局域网跨设备文件传输与共享服务
       </footer>
     </div>
   );

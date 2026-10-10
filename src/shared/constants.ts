@@ -8,7 +8,7 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   maxFileSizeMB: 1024, // 默认 1GB
   autoCleanupDays: 0,  // 默认永不清理
   allowAnonymousDelete: true,
-  siteTitle: 'EasyDrop',
+  siteTitle: 'LightDrop',
 };
 
 export const STORAGE_FILES_DIRNAME = 'files';

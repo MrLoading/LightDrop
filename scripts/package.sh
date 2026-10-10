@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# EasyDrop 打包脚本 (Package Script)
+# LightDrop 打包脚本 (Package Script)
 # 支持：
 # 1. Docker 容器镜像打包 (构建后导出为本地 .tar 文件，并自动删除本地镜像仓库中的镜像)
 # 2. 原生二进制可执行程序打包 (如环境支持 pkg / bun / Node SEA) 与便携免编译独立发行包
@@ -19,7 +19,7 @@ fi
 
 # ----------------- 默认配置 -----------------
 OUTPUT_DIR="${REPO_ROOT}/dist-packages"
-IMAGE_NAME="easydrop:latest"
+IMAGE_NAME="lightdrop:latest"
 TARGET="all" # all | docker | binary
 SKIP_BUILD=false
 LANG_OPT="zh"
@@ -37,7 +37,7 @@ fi
 show_help() {
   if [ "$LANG_OPT" = "en" ]; then
     cat <<EOF
-EasyDrop Packaging Utility - v${VERSION}
+LightDrop Packaging Utility - v${VERSION}
 
 Usage:
   ./package.sh [OPTIONS]
@@ -47,7 +47,7 @@ Options:
   --docker                Package Docker image only (export to .tar and remove from local image repo)
   --binary                Package native binary executable only (if supported by environment)
   -o, --output-dir <DIR>  Output directory for packaged archives (Default: ./dist-packages)
-  --image-name <NAME>     Docker image name and tag (Default: easydrop:latest)
+  --image-name <NAME>     Docker image name and tag (Default: lightdrop:latest)
   --skip-build            Skip frontend/backend build step if already compiled
   -l, --lang <zh|en>      Output language (Default: zh)
   -h, --help              Show this help message
@@ -60,7 +60,7 @@ Examples:
 EOF
   else
     cat <<EOF
-EasyDrop 项目打包工具 - v${VERSION}
+LightDrop 项目打包工具 - v${VERSION}
 
 用法:
   ./package.sh [选项]
@@ -70,7 +70,7 @@ EasyDrop 项目打包工具 - v${VERSION}
   --docker                仅打包 Docker 容器镜像 (构建后保存到本地 .tar，并删除本地镜像以释放空间)
   --binary                仅打包独立二进制可执行程序 (如果系统环境支持 pkg/bun/SEA)
   -o, --output-dir <目录> 打包产物输出目录 (默认: ./dist-packages)
-  --image-name <名称>     Docker 镜像完整名称及标签 (默认: easydrop:latest)
+  --image-name <名称>     Docker 镜像完整名称及标签 (默认: lightdrop:latest)
   --skip-build            跳过构建步骤 (适用于 dist 目录已构建完成的情况)
   -l, --lang <zh|en>      语言设置 (默认: zh，可选: en)
   -h, --help              显示此帮助信息
@@ -130,9 +130,9 @@ done
 cd "${REPO_ROOT}"
 
 if [ "$LANG_OPT" = "en" ]; then
-  print_banner "EasyDrop Packaging Engine v${VERSION}" "LAN Sharing - Fast & Lightweight"
+  print_banner "LightDrop Packaging Engine v${VERSION}" "LAN Sharing - Fast & Lightweight"
 else
-  print_banner "EasyDrop 打包引擎 v${VERSION}" "局域网跨设备极速快传 - 自动化发布系统"
+  print_banner "LightDrop 打包引擎 v${VERSION}" "局域网跨设备极速快传 - 自动化发布系统"
 fi
 
 mkdir -p "${OUTPUT_DIR}"
@@ -193,7 +193,7 @@ package_docker() {
     return 0
   fi
 
-  local tar_filename="easydrop-docker-${VERSION}.tar"
+  local tar_filename="lightdrop-docker-${VERSION}.tar"
   local output_tar="${OUTPUT_DIR}/${tar_filename}"
 
   # 1. 构建镜像
@@ -239,9 +239,9 @@ package_binary() {
   arch_type="$(uname -m)"
 
   local binary_built=false
-  local bin_name="easydrop"
+  local bin_name="lightdrop"
   if [ "$os_type" = "windows" ] || [[ "$os_type" == *"mingw"* ]]; then
-    bin_name="easydrop.exe"
+    bin_name="lightdrop.exe"
   fi
 
   # 检测环境是否具备二进制打包工具
@@ -269,7 +269,7 @@ package_binary() {
 
   if [ "$binary_built" = true ] && [ -f "${temp_bin_dir}/${bin_name}" ]; then
     # 打包二进制发行包 (包含二进制可执行文件 + 前端静态页面 dist/client)
-    local bin_tar="${OUTPUT_DIR}/easydrop-bin-${VERSION}-${os_type}-${arch_type}.tar.gz"
+    local bin_tar="${OUTPUT_DIR}/lightdrop-bin-${VERSION}-${os_type}-${arch_type}.tar.gz"
     log_info "正在打包独立二进制发布包: ${bin_tar}..."
     tar -czf "${bin_tar}" \
       -C "${temp_bin_dir}" "${bin_name}" \
@@ -291,8 +291,8 @@ package_binary() {
       log_info "系统正在自动生成标准【开箱即用免编译独立发行包】(包含完整服务端、前端与运行环境配置)..."
     fi
 
-    local standalone_tar="${OUTPUT_DIR}/easydrop-standalone-${VERSION}.tar.gz"
-    local temp_stage="${OUTPUT_DIR}/.tmp_standalone/easydrop"
+    local standalone_tar="${OUTPUT_DIR}/lightdrop-standalone-${VERSION}.tar.gz"
+    local temp_stage="${OUTPUT_DIR}/.tmp_standalone/lightdrop"
     rm -rf "${OUTPUT_DIR}/.tmp_standalone"
     mkdir -p "${temp_stage}"
 
@@ -312,13 +312,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 export NODE_ENV=production
 export PORT="${PORT:-8080}"
-echo "Starting EasyDrop on port ${PORT}..."
+echo "Starting LightDrop on port ${PORT}..."
 exec node dist/server/index.js
 RUN_EOF
     chmod +x "${temp_stage}/run.sh"
 
     # 打包为 tar.gz
-    tar -czf "${standalone_tar}" -C "${OUTPUT_DIR}/.tmp_standalone" easydrop
+    tar -czf "${standalone_tar}" -C "${OUTPUT_DIR}/.tmp_standalone" lightdrop
     rm -rf "${OUTPUT_DIR}/.tmp_standalone"
 
     local st_size
@@ -330,7 +330,7 @@ RUN_EOF
 
 # ----------------- 执行各构建目标 -----------------
 build_project
-
+ 
 if [ "$TARGET" = "all" ] || [ "$TARGET" = "docker" ]; then
   package_docker
 fi
@@ -344,7 +344,7 @@ echo -e "\n${GREEN}${BOLD}══════════════════
 if [ "$LANG_OPT" = "en" ]; then
   echo -e " ${BOLD}${GREEN}✔ PACKAGING COMPLETED SUCCESSFULLY${RESET}"
 else
-  echo -e " ${BOLD}${GREEN}✔ EasyDrop 打包作业全部完成${RESET}"
+  echo -e " ${BOLD}${GREEN}✔ LightDrop 打包作业全部完成${RESET}"
 fi
 echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${RESET}"
 
@@ -366,6 +366,6 @@ fi
 echo -e "\n${BOLD}使用指引:${RESET}"
 echo -e "  • Docker TAR 镜像包使用方式:"
 echo -e "    ${DIM}docker load -i <导出的.tar文件>${RESET}"
-echo -e "    ${DIM}docker run -d -p 8080:8080 -v /var/lib/easydrop/data:/app/data easydrop:latest${RESET}"
+echo -e "    ${DIM}docker run -d -p 8080:8080 -v /var/lib/lightdrop/data:/app/data lightdrop:latest${RESET}"
 echo -e "  • 自动化一键部署服务:"
 echo -e "    ${DIM}./deploy.sh --mode docker${RESET}  或  ${DIM}./deploy.sh --mode standalone${RESET}\n"

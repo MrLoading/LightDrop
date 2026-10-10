@@ -784,8 +784,8 @@ export const SendCard: React.FC<SendCardProps> = ({
           <input
             ref={passwordInputRef}
             type={showPassword ? 'text' : 'password'}
-            name="easydrop_custom_token_no_fill"
-            id="easydrop_custom_token_no_fill"
+            name="lightdrop_custom_token_no_fill"
+            id="lightdrop_custom_token_no_fill"
             autoComplete="new-password"
             autoCorrect="off"
             autoCapitalize="none"

@@ -10,7 +10,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icons/*.png'],
       manifest: {
-        name: '局域网快传 - EasyDrop',
+        name: '局域网快传 - LightDrop',
         short_name: '局域网快传',
         description: '极速局域网文件与文本传输共享工具，无需登录，跨设备互传。',
         theme_color: '#2563eb',

@@ -1,5 +1,5 @@
 /**
- * EasyDrop 共享记录类型
+ * LightDrop 共享记录类型
  */
 export type ShareItemType = 'text' | 'file' | 'folder' | 'image';
 

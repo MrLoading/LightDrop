@@ -1,11 +1,11 @@
 version: '3.8'
 
 services:
-  easydrop:
+  lightdrop:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: easydrop
+    container_name: lightdrop
     restart: unless-stopped
     ports:
       - "8080:8080"

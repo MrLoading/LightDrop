@@ -9,7 +9,7 @@ class ConfigManager {
 
   constructor() {
     // 根目录下的引导配置文件记录当前存储目录指向
-    this.bootstrapConfigPath = path.resolve(process.cwd(), 'easydrop.config.json');
+    this.bootstrapConfigPath = path.resolve(process.cwd(), 'lightdrop.config.json');
     this.loadInitialConfig();
   }
 

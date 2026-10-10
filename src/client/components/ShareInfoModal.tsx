@@ -136,7 +136,7 @@ export const ShareInfoModal: React.FC<ShareInfoModalProps> = ({
     const pwdText = currentPassword ? currentPassword : '已加密保护 (需访问密码)';
 
     const isText = item.type === 'text';
-    const headerTitle = isText ? '【EasyDrop 文本分享】' : '【EasyDrop 文件分享】';
+    const headerTitle = isText ? '【LightDrop 文本分享】' : '【LightDrop 文件分享】';
     const labelName = isText ? '文本内容：' : '文件名：';
     const labelLink = isText ? '查看链接：' : '下载链接：';
     const labelPwd = isText ? '访问密码：' : '提取密码：';

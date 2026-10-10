@@ -288,10 +288,10 @@ export const TextReaderView: React.FC<TextReaderViewProps> = ({
 
       {/* 底部信息条 (与设计图完全一致) */}
       <div className="px-5 py-2.5 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400 shrink-0">
-        <span>{t('markdownModal.footerEngine', 'EasyDrop Markdown 渲染引擎 · 支持 GFM 语法')}</span>
+        <span>{t('markdownModal.footerEngine', 'LightDrop Markdown 渲染引擎 · 支持 GFM 语法')}</span>
         <span>
           {isStandalone
-            ? t('downloadPage.backHomeHint', '点击右上角返回 EasyDrop 首页')
+            ? t('downloadPage.backHomeHint', '点击右上角返回 LightDrop 首页')
             : t('markdownModal.escTip', '按 ESC 或点击右上角 X 关闭')}
         </span>
       </div>

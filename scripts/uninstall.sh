@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# EasyDrop 卸载脚本 (Uninstall Script)
+# LightDrop 卸载脚本 (Uninstall Script)
 # 支持：
-# 1. 默认采用工作路径 /var/lib/easydrop，支持命令行指定其他工作路径
+# 1. 默认采用工作路径 /var/lib/lightdrop，支持命令行指定其他工作路径
 # 2. 读取 <工作路径>/runinfo 目录下的 .json 文件获取运行方式，并基于其准确卸载
 # 3. 提供是否删除上传的文件等内容选项 (保留数据 or 彻底清除)
 # 4. 删除对应工作路径内容
@@ -21,7 +21,7 @@ if [ -f "${SCRIPT_DIR}/common.sh" ]; then
 fi
 
 # ----------------- 默认配置 -----------------
-DEFAULT_WORK_DIR="/var/lib/easydrop"
+DEFAULT_WORK_DIR="/var/lib/lightdrop"
 WORK_DIR="${DEFAULT_WORK_DIR}"
 LANG_OPT="" # 优先从 runinfo.json 读取，否则默认 zh
 DELETE_DATA="" # true: 彻底删除数据 | false: 保留数据 | "": 待交互确认
@@ -31,7 +31,7 @@ FORCE=false
 # ----------------- 帮助信息 -----------------
 show_help() {
   cat <<EOF
-EasyDrop 卸载工具 (Uninstall Script)
+LightDrop 卸载工具 (Uninstall Script)
 
 用法:
   ./uninstall.sh [选项]
@@ -46,8 +46,8 @@ EasyDrop 卸载工具 (Uninstall Script)
   -h, --help              显示此帮助信息
 
 示例:
-  ./uninstall.sh                                # 默认从 /var/lib/easydrop 卸载 (交互确认是否删数据)
-  ./uninstall.sh -w /var/lib/easydrop           # 指定工作路径卸载
+  ./uninstall.sh                                # 默认从 /var/lib/lightdrop 卸载 (交互确认是否删数据)
+  ./uninstall.sh -w /var/lib/lightdrop          # 指定工作路径卸载
   ./uninstall.sh --delete-data -y               # 一键彻底静默卸载并清理全部上传数据
   ./uninstall.sh --keep-data                    # 卸载服务但保留上传文件
 EOF
@@ -107,8 +107,8 @@ RUNINFO_DIR="${WORK_DIR}/runinfo"
 RUNINFO_JSON=""
 
 if [ -d "${RUNINFO_DIR}" ]; then
-  if [ -f "${RUNINFO_DIR}/easydrop-runinfo.json" ]; then
-    RUNINFO_JSON="${RUNINFO_DIR}/easydrop-runinfo.json"
+  if [ -f "${RUNINFO_DIR}/lightdrop-runinfo.json" ]; then
+    RUNINFO_JSON="${RUNINFO_DIR}/lightdrop-runinfo.json"
   elif [ -f "${RUNINFO_DIR}/runinfo.json" ]; then
     RUNINFO_JSON="${RUNINFO_DIR}/runinfo.json"
   else
@@ -122,10 +122,10 @@ fi
 
 # 解析运行信息
 DEPLOY_MODE=""
-CONTAINER_NAME="easydrop"
-SERVICE_NAME="easydrop.service"
-PM2_NAME="easydrop"
-PID_FILE="${RUNINFO_DIR}/easydrop.pid"
+CONTAINER_NAME="lightdrop"
+SERVICE_NAME="lightdrop.service"
+PM2_NAME="lightdrop"
+PID_FILE="${RUNINFO_DIR}/lightdrop.pid"
 APP_PID=""
 RECORDED_DATA_DIR="${WORK_DIR}/data"
 RECORDED_LANG="zh"
@@ -166,9 +166,9 @@ DATA_DIR="${RECORDED_DATA_DIR}"
 # 打印横幅
 echo ""
 if [ "$LANG_OPT" = "en" ]; then
-  print_banner "EasyDrop Uninstallation Engine" "Target WorkDir: ${WORK_DIR}"
+  print_banner "LightDrop Uninstallation Engine" "Target WorkDir: ${WORK_DIR}"
 else
-  print_banner "EasyDrop 卸载与清理引擎" "目标工作路径: ${WORK_DIR}"
+  print_banner "LightDrop 卸载与清理引擎" "目标工作路径: ${WORK_DIR}"
 fi
 
 # ----------------- 步骤 1: 审查运行记录与模式分析 -----------------
@@ -254,9 +254,9 @@ fi
 
 # ----------------- 步骤 3: 停止并清理运行服务 -----------------
 if [ "$LANG_OPT" = "en" ]; then
-  log_step "3/4" "Stopping and removing active EasyDrop service [${DEPLOY_MODE}]..."
+  log_step "3/4" "Stopping and removing active LightDrop service [${DEPLOY_MODE}]..."
 else
-  log_step "3/4" "停止并注销正在运行的 EasyDrop 服务 [${DEPLOY_MODE}]..."
+  log_step "3/4" "停止并注销正在运行的 LightDrop 服务 [${DEPLOY_MODE}]..."
 fi
 
 case "$DEPLOY_MODE" in
@@ -353,7 +353,7 @@ else
       rm -rf "${WORK_DIR}/${sub}"
     fi
   done
-  rm -f "${WORK_DIR}/easydrop.config.json" "${WORK_DIR}/app.log" 2>/dev/null || true
+  rm -f "${WORK_DIR}/lightdrop.config.json" "${WORK_DIR}/app.log" 2>/dev/null || true
 
   log_success "服务程序文件与运行配置已清理完毕"
 fi
@@ -361,13 +361,13 @@ fi
 # ----------------- 优雅最终状态信息 -----------------
 echo -e "\n${GREEN}${BOLD}════════════════════════════════════════════════════════════════${RESET}"
 if [ "$LANG_OPT" = "en" ]; then
-  echo -e " ${BOLD}${GREEN}✔ EASYDROP UNINSTALLED SUCCESSFULLY${RESET}"
+  echo -e " ${BOLD}${GREEN}✔ LIGHTDROP UNINSTALLED SUCCESSFULLY${RESET}"
 else
-  echo -e " ${BOLD}${GREEN}✔ EasyDrop 卸载作业全部完成${RESET}"
+  echo -e " ${BOLD}${GREEN}✔ LightDrop 卸载作业全部完成${RESET}"
 fi
 echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${RESET}"
 
-print_card_row "卸载对象" "EasyDrop 服务实例"
+print_card_row "卸载对象" "LightDrop 服务实例"
 print_card_row "服务状态" "${RED}○ 已停止并移除 (Stopped & Removed)${RESET}"
 print_card_row "工作路径" "${WORK_DIR}"
 

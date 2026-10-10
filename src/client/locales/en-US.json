@@ -1,6 +1,6 @@
 {
   "header": {
-    "title": "EasyDrop",
+    "title": "LightDrop",
     "subtitle": "Any visitor can copy text and download files without login.",
     "connected": "Online",
     "reconnecting": "Reconnecting...",
@@ -208,14 +208,14 @@
     "title": "System & Storage Settings",
     "subtitle": "Configure storage directory, cleanup rules, language, and file limits",
     "language": "Interface Language",
-    "languageDesc": "Select preferred interface language for EasyDrop",
+    "languageDesc": "Select preferred interface language for LightDrop",
     "langZh": "简体中文 (Chinese)",
     "langEn": "English (英文)",
     "langAuto": "Follow System (Auto Detect)",
     "storageDir": "Data Storage Directory (Absolute or relative)",
     "testDir": "Check Availability",
     "testing": "Checking...",
-    "dirPlaceholder": "./data or /var/easydrop_data",
+    "dirPlaceholder": "./data or /var/lightdrop_data",
     "storageTip": "All records are persisted in records.json and files/ in this directory. Zero external DB, fast and lightweight.",
     "migrateData": "Automatically migrate existing records and files when changing directory",
     "storageUsage": "Current Storage Usage",
@@ -301,7 +301,7 @@
     "inputTextLabel": "Enter access password to read this text",
     "submitVerify": "Verify & Download",
     "submitUnlockText": "Verify Password & Start Reading",
-    "backHomeHint": "Click the top right arrow to return to EasyDrop home"
+    "backHomeHint": "Click the top right arrow to return to LightDrop home"
   },
   "passwordModal": {
     "title": "Enter Access Password",
@@ -327,7 +327,7 @@
     "copy": "Copy",
     "copied": "Copied",
     "downloadMd": "Download .md",
-    "footerEngine": "EasyDrop Markdown Engine · GFM Supported",
+    "footerEngine": "LightDrop Markdown Engine · GFM Supported",
     "escTip": "Press ESC or click X to close",
     "dialogTitle": "Export Markdown File",
     "dialogSubtitle": "Name your downloaded .md file",
@@ -360,7 +360,7 @@
     "thDetails": "Details",
     "close": "Close",
     "clearFailed": "Failed to clear logs",
-    "clientIpNotice": "Current IP is {{ip}}. Security Policy: Clearing logs is only allowed on the host machine where EasyDrop was launched.",
+    "clientIpNotice": "Current IP is {{ip}}. Security Policy: Clearing logs is only allowed on the host machine where LightDrop was launched.",
     "localHostBadge": "Localhost",
     "storageNotice": "Logs are stored in server disk directory and persist across restarts",
     "guestVisitor": "LAN Guest"

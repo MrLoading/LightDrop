@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="./public/icons/icon-192x192.png" width="120" height="120" alt="EasyDrop Logo" style="border-radius: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);" />
+  <img src="./public/icons/icon-192x192.png" width="120" height="120" alt="LightDrop Logo" style="border-radius: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);" />
 </p>
 
-<h1 align="center">⚡ EasyDrop</h1>
+<h1 align="center">⚡ LightDrop</h1>
 
 <p align="center">
   <strong>现代化、极简、高隐私的局域网跨设备文件与文本共享服务</strong><br>
@@ -47,7 +47,7 @@
 
 在跨设备文件与文本互传场景中，现有工具往往存在诸多限制：
 
-| 方案 | 痛点 | EasyDrop 优势 |
+| 方案 | 痛点 | LightDrop 优势 |
 | :--- | :--- | :--- |
 | **微信 / QQ / IM** | 大文件限速、媒体严重压缩、隐私上传云端 | **跑满局域网千兆带宽**，零外网流量，数据 100% 留存本地 |
 | **Apple AirDrop** | 仅支持苹果生态内部互传 | **全平台免装客户端**，任意设备有浏览器即开即用 |
@@ -118,9 +118,9 @@
 version: '3.8'
 
 services:
-  easydrop:
+  lightdrop:
     image: node:22-alpine
-    container_name: easydrop
+    container_name: lightdrop
     restart: unless-stopped
     working_dir: /app
     volumes:
@@ -181,7 +181,7 @@ pnpm dev
 本项目采用 **TypeScript 全栈单仓规范**，前后端共享底层类型契约：
 
 ```text
-EasyDrop/
+LightDrop/
 ├── src/
 │   ├── shared/                # 协议层：前后端共享 TypeScript 类型契约
 │   ├── server/                # 服务端：Node.js + Express + WebSocket + 原子文件引擎
@@ -246,7 +246,7 @@ data/
 <details>
 <summary><strong>Q: 更改存储路径到 NAS 挂载目录后，重启会丢失吗？</strong></summary>
 
-不会。根目录下 `easydrop.config.json` 会持久记录当前生效的物理路径，服务重启后自动从引导配置定位目标目录。
+不会。根目录下 `lightdrop.config.json` 会持久记录当前生效的物理路径，服务重启后自动从引导配置定位目标目录。
 </details>
 
 <details>

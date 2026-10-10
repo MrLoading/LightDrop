@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: 'easydrop',
+      name: 'lightdrop',
       script: './dist/server/index.js',
       cwd: __dirname,
       instances: 1,
