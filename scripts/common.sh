@@ -136,27 +136,125 @@ json_read() {
   fi
 }
 
+# ----------------- 操作系统与架构探测 -----------------
+detect_os() {
+  local os_raw=""
+  if [ -n "${OSTYPE:-}" ]; then
+    os_raw="$OSTYPE"
+  else
+    os_raw="$(uname -s 2>/dev/null || echo 'unknown')"
+  fi
+  os_raw="$(echo "$os_raw" | tr '[:upper:]' '[:lower:]')"
+
+  case "$os_raw" in
+    darwin*)
+      echo "macos"
+      ;;
+    linux*)
+      echo "linux"
+      ;;
+    msys*|cygwin*|mingw*|win32*|windows*)
+      echo "windows"
+      ;;
+    *)
+      local uname_s
+      uname_s="$(uname -s 2>/dev/null || echo 'unknown')"
+      case "$uname_s" in
+        Darwin*) echo "macos" ;;
+        Linux*)  echo "linux" ;;
+        MINGW*|MSYS*|CYGWIN*) echo "windows" ;;
+        *) echo "unknown" ;;
+      esac
+      ;;
+  esac
+}
+
+get_os_pretty_name() {
+  local os
+  os="$(detect_os)"
+  local arch
+  arch="$(uname -m 2>/dev/null || echo '')"
+  case "$os" in
+    macos)
+      local ver
+      ver="$(sw_vers -productVersion 2>/dev/null || echo '')"
+      echo "macOS ${ver} (${arch})"
+      ;;
+    linux)
+      local distro=""
+      if [ -f /etc/os-release ]; then
+        distro="$(grep -E '^PRETTY_NAME=' /etc/os-release 2>/dev/null | cut -d= -f2- | tr -d '"' || true)"
+      fi
+      [ -z "$distro" ] && distro="Linux"
+      echo "${distro} (${arch})"
+      ;;
+    windows)
+      echo "Windows (${arch:-x64})"
+      ;;
+    *)
+      echo "Unknown OS ($(uname -s 2>/dev/null || ''))"
+      ;;
+  esac
+}
+
+# ----------------- 基于操作系统自适应默认工作路径 -----------------
+get_default_work_dir() {
+  local os
+  os="$(detect_os)"
+  case "$os" in
+    macos)
+      if [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ]; then
+        echo "/Library/Application Support/LightDrop"
+      else
+        echo "${HOME}/Library/Application Support/LightDrop"
+      fi
+      ;;
+    linux)
+      if [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ]; then
+        echo "/var/lib/lightdrop"
+      else
+        echo "${HOME}/.lightdrop"
+      fi
+      ;;
+    windows)
+      if [ -n "${LOCALAPPDATA:-}" ]; then
+        echo "${LOCALAPPDATA}/LightDrop" | tr '\\' '/'
+      elif [ -n "${PROGRAMDATA:-}" ]; then
+        echo "${PROGRAMDATA}/LightDrop" | tr '\\' '/'
+      else
+        echo "${HOME}/.lightdrop"
+      fi
+      ;;
+    *)
+      echo "${HOME}/.lightdrop"
+      ;;
+  esac
+}
+
+# ----------------- 获取精确 Node 可执行文件路径 -----------------
+get_node_bin() {
+  local bin=""
+  bin="$(command -v node 2>/dev/null || which node 2>/dev/null || true)"
+  echo "$bin"
+}
+
 # ----------------- 安全检查：拦截高危目录误删 -----------------
 is_dangerous_dir() {
   local raw_dir="$1"
   if [ -z "$raw_dir" ]; then
     return 0 # dangerous
   fi
-  # 规范化路径
-  local abs_dir
-  if [ -d "$raw_dir" ]; then
-    abs_dir=$(cd "$raw_dir" && pwd)
-  else
-    abs_dir=$(cd "$(dirname "$raw_dir")" 2>/dev/null && pwd)/$(basename "$raw_dir")
-  fi
 
-  case "$abs_dir" in
-    "/" | "/bin" | "/sbin" | "/etc" | "/usr" | "/usr/bin" | "/usr/lib" | "/var" | "/var/lib" | "/var/log" | "/tmp" | "/home" | "/root" | "/Users" | "/System" | "/Library" | "/Applications")
+  local norm_dir
+  norm_dir=$(echo "$raw_dir" | tr '\\' '/' | tr '[:upper:]' '[:lower:]' | sed 's:/*$::')
+
+  case "$norm_dir" in
+    ""|"/"|"/bin"|"/sbin"|"/etc"|"/usr"|"/usr/bin"|"/usr/lib"|"/var"|"/var/lib"|"/var/log"|"/tmp"|"/home"|"/root"|"/users"|"/system"|"/library"|"/applications"|"c:"|"c:/"|"c:/windows"|"c:/program files"|"c:/program files (x86)"|"c:/users"|"c:/programdata")
       return 0 # dangerous
       ;;
     *)
       # 必须路径深度至少两层以上
-      if [ "$abs_dir" = "/" ] || [ -z "$abs_dir" ]; then
+      if [ "$norm_dir" = "/" ] || [ -z "$norm_dir" ]; then
         return 0
       fi
       return 1 # safe
@@ -175,8 +273,8 @@ ensure_writable_dir() {
     return 0
   fi
 
-  # 若无写权限且为普通用户，尝试 sudo
-  if command -v sudo >/dev/null 2>&1; then
+  # 若无写权限且为普通用户，尝试 sudo (非 Windows 环境)
+  if [ "$(detect_os)" != "windows" ] && command -v sudo >/dev/null 2>&1; then
     log_warn "需要管理员权限创建/配置工作目录: ${target_dir}"
     sudo mkdir -p "$target_dir"
     sudo chown -R "$(id -u):$(id -g)" "$target_dir" 2>/dev/null || true
@@ -187,3 +285,4 @@ ensure_writable_dir() {
 
   return 1
 }
+

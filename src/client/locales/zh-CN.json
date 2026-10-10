@@ -421,9 +421,9 @@
     "subtitle": "选择或确认下载保存目录",
     "folderZipBadge": "打包为 ZIP",
     "saveDir": "本机保存目录",
-    "savedDirBadge": "上次使用的目录",
+    "savedDirBadge": "上次使用的设置",
     "readingSavedDir": "正在读取浏览器已记住的目录...",
-    "noDirChosen": "尚未选择本机目录 (首次需指定)",
+    "noDirChosen": "尚未选择本机目录",
     "dirTip": "浏览器已缓存此目录，下次默认显示，可随时修改",
     "firstChooseTip": "选择后将永久缓存，后续下载免重复选择",
     "changeDir": "更改目录",
@@ -436,7 +436,14 @@
     "btnCancel": "取消",
     "btnConfirm": "确认下载",
     "btnSelectAndDownload": "选择目录并下载",
-    "saveSuccessToast": "已成功保存「{{file}}」至「{{dir}}」目录"
+    "saveSuccessToast": "已成功保存「{{file}}」至「{{dir}}」目录",
+    "destDefaultTitle": "系统默认下载目录 (Mac 下载文件夹)",
+    "destDefaultDesc": "文件直接保存至 macOS「下载」文件夹，免授权、零安全限制、最稳定快速。",
+    "destCustomTitle": "自定义本机独立目录",
+    "destCustomDesc": "指定特定文件夹（如在下载目录下新建 LightDrop 文件夹），支持流式直接写入。",
+    "macSystemFilesTip": "提示：受 macOS 与 Chromium 安全策略限制，系统禁止直接授权根「下载」或「桌面」目录（会提示含有系统文件）。如需在下载目录中保存，请在其中【新建子文件夹】（如命名为 LightDrop）再选取；或者直接选择【系统默认下载目录】。",
+    "switchToDefaultBtn": "一键使用系统默认下载目录",
+    "systemFolderBlockedNotice": "检测到受限系统目录。建议在「下载」中【新建子文件夹】选取，或直接切换为系统默认下载。"
   }
 }
 

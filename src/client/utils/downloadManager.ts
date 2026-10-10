@@ -1,7 +1,10 @@
 import { ShareItem } from '../../shared/types.js';
 import { getUserNickname } from './nickname.js';
 
+export type DownloadDestinationType = 'browser_default' | 'custom_directory';
+
 export interface SavedDirectoryInfo {
+  type: DownloadDestinationType;
   handle: FileSystemDirectoryHandle | null;
   dirName: string | null;
 }
@@ -10,6 +13,7 @@ const DB_NAME = 'lightdrop_cache_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'directory_handles';
 const KEY_DIR_HANDLE = 'download_directory_handle';
+const LOCAL_STORAGE_KEY_DEST_TYPE = 'lightdrop_download_dest_type';
 const LOCAL_STORAGE_KEY_DIR_NAME = 'lightdrop_download_dir_name';
 
 /**
@@ -40,18 +44,37 @@ function openDatabase(): Promise<IDBDatabase> {
 }
 
 /**
- * 读取浏览器缓存的上次下载目录信息
+ * 读取浏览器缓存的上次下载设置信息
  */
 export async function getSavedDownloadDirectory(): Promise<SavedDirectoryInfo> {
   let fallbackName: string | null = null;
+  let savedDestType: DownloadDestinationType = 'browser_default';
+
   try {
     fallbackName = localStorage.getItem(LOCAL_STORAGE_KEY_DIR_NAME);
+    const storedType = localStorage.getItem(LOCAL_STORAGE_KEY_DEST_TYPE);
+    if (storedType === 'custom_directory') {
+      savedDestType = 'custom_directory';
+    } else if (storedType === 'browser_default') {
+      savedDestType = 'browser_default';
+    } else if (fallbackName) {
+      savedDestType = 'custom_directory';
+    } else {
+      savedDestType = 'browser_default';
+    }
   } catch (_) {}
 
+  // 若不支持目录选择 API，固定使用浏览器默认下载
   if (!isDirectoryPickerSupported()) {
-    return { handle: null, dirName: fallbackName };
+    return { type: 'browser_default', handle: null, dirName: fallbackName };
   }
 
+  // 若用户设置了默认下载模式
+  if (savedDestType === 'browser_default') {
+    return { type: 'browser_default', handle: null, dirName: null };
+  }
+
+  // 自定义目录模式：从 IndexedDB 读取 handle
   try {
     const db = await openDatabase();
     return new Promise((resolve) => {
@@ -61,15 +84,29 @@ export async function getSavedDownloadDirectory(): Promise<SavedDirectoryInfo> {
       req.onsuccess = () => {
         const handle = (req.result as FileSystemDirectoryHandle) || null;
         const dirName = handle ? handle.name : fallbackName;
-        resolve({ handle, dirName });
+        if (handle) {
+          resolve({ type: 'custom_directory', handle, dirName });
+        } else {
+          resolve({ type: 'browser_default', handle: null, dirName: null });
+        }
       };
       req.onerror = () => {
-        resolve({ handle: null, dirName: fallbackName });
+        resolve({ type: 'browser_default', handle: null, dirName: fallbackName });
       };
     });
   } catch (e) {
-    return { handle: null, dirName: fallbackName };
+    return { type: 'browser_default', handle: null, dirName: fallbackName };
   }
+}
+
+/**
+ * 设置为浏览器原生默认下载模式 (即保存到 Mac 系统的“下载”目录)
+ */
+export async function setBrowserDefaultDownload(): Promise<SavedDirectoryInfo> {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY_DEST_TYPE, 'browser_default');
+  } catch (_) {}
+  return { type: 'browser_default', handle: null, dirName: null };
 }
 
 /**
@@ -77,6 +114,7 @@ export async function getSavedDownloadDirectory(): Promise<SavedDirectoryInfo> {
  */
 export async function saveDownloadDirectory(handle: FileSystemDirectoryHandle): Promise<void> {
   try {
+    localStorage.setItem(LOCAL_STORAGE_KEY_DEST_TYPE, 'custom_directory');
     localStorage.setItem(LOCAL_STORAGE_KEY_DIR_NAME, handle.name);
   } catch (_) {}
 
@@ -98,6 +136,7 @@ export async function saveDownloadDirectory(handle: FileSystemDirectoryHandle): 
  */
 export async function clearSavedDownloadDirectory(): Promise<void> {
   try {
+    localStorage.removeItem(LOCAL_STORAGE_KEY_DEST_TYPE);
     localStorage.removeItem(LOCAL_STORAGE_KEY_DIR_NAME);
   } catch (_) {}
 
@@ -125,7 +164,7 @@ export async function pickDownloadDirectory(): Promise<SavedDirectoryInfo> {
     mode: 'readwrite',
   });
   await saveDownloadDirectory(handle);
-  return { handle, dirName: handle.name };
+  return { type: 'custom_directory', handle, dirName: handle.name };
 }
 
 /**

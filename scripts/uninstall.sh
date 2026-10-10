@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# LightDrop 卸载脚本 (Uninstall Script)
+# LightDrop 跨平台智能卸载与清理脚本 (Uninstall Script)
 # 支持：
-# 1. 默认采用工作路径 /var/lib/lightdrop，支持命令行指定其他工作路径
-# 2. 读取 <工作路径>/runinfo 目录下的 .json 文件获取运行方式，并基于其准确卸载
-# 3. 提供是否删除上传的文件等内容选项 (保留数据 or 彻底清除)
-# 4. 删除对应工作路径内容
-# 5. 优雅打印过程及最终状态信息
+# 1. 自动适配操作系统 (macOS / Linux / Windows)，自适应解析工作路径
+# 2. 读取 <工作路径>/runinfo/*.json 获取生命周期模式及自启动配置并精准注销：
+#    • macOS:   注销并移除 LaunchAgent 服务，清理开机/登录自启动项
+#    • Linux:   停止并注销 Systemd 单元，关闭系统自启动 (systemctl disable)
+#    • Windows: 注销任务计划程序 (schtasks) 及开机自启动文件夹启动项
+#    • 全平台:  注销 Docker 容器、PM2 进程、独立后台进程
+# 3. 灵活的数据保留策略 (数据安全保留 vs 彻底清空)
+# 4. 彻底清理运行时产物与配置
 # ==============================================================================
 
 set -eo pipefail
@@ -20,8 +23,12 @@ if [ -f "${SCRIPT_DIR}/common.sh" ]; then
   source "${SCRIPT_DIR}/common.sh"
 fi
 
+# ----------------- 环境与操作系统探测 -----------------
+CURRENT_OS="$(detect_os)"
+OS_PRETTY="$(get_os_pretty_name)"
+DEFAULT_WORK_DIR="$(get_default_work_dir)"
+
 # ----------------- 默认配置 -----------------
-DEFAULT_WORK_DIR="/var/lib/lightdrop"
 WORK_DIR="${DEFAULT_WORK_DIR}"
 LANG_OPT="" # 优先从 runinfo.json 读取，否则默认 zh
 DELETE_DATA="" # true: 彻底删除数据 | false: 保留数据 | "": 待交互确认
@@ -31,14 +38,15 @@ FORCE=false
 # ----------------- 帮助信息 -----------------
 show_help() {
   cat <<EOF
-LightDrop 卸载工具 (Uninstall Script)
+LightDrop 跨平台服务卸载工具 (Uninstall Script)
+检测到当前系统: ${OS_PRETTY}
 
 用法:
   ./uninstall.sh [选项]
 
 选项:
-  -w, --workdir <路径>    指定工作路径 (默认: ${DEFAULT_WORK_DIR})
-  --delete-data           【彻底删除】上传的文件、记录与历史数据
+  -w, --workdir <路径>    指定工作路径 (当前系统默认: ${DEFAULT_WORK_DIR})
+  --delete-data           【彻底删除】上传的文件、文本记录与历史数据
   --keep-data             【安全保留】上传的文件与数据，仅卸载服务并清理程序文件
   -l, --lang <zh|en>      指定界面语言 (默认优先读取安装记录，或默认为 zh)
   -y, --yes               非交互确认模式 (默认保留数据，除非配合 --delete-data)
@@ -46,10 +54,10 @@ LightDrop 卸载工具 (Uninstall Script)
   -h, --help              显示此帮助信息
 
 示例:
-  ./uninstall.sh                                # 默认从 /var/lib/lightdrop 卸载 (交互确认是否删数据)
-  ./uninstall.sh -w /var/lib/lightdrop          # 指定工作路径卸载
+  ./uninstall.sh                                # 默认从当前系统工作路径交互式卸载
+  ./uninstall.sh -w "${DEFAULT_WORK_DIR}"        # 指定工作路径卸载
   ./uninstall.sh --delete-data -y               # 一键彻底静默卸载并清理全部上传数据
-  ./uninstall.sh --keep-data                    # 卸载服务但保留上传文件
+  ./uninstall.sh --keep-data                    # 卸载服务但保留上传的文件
 EOF
   exit 0
 }
@@ -93,7 +101,7 @@ done
 
 # ----------------- 安全检查与目录有效性 -----------------
 if is_dangerous_dir "${WORK_DIR}"; then
-  log_error "安全拦截: 指定的工作路径 [${WORK_DIR}] 为系统关键目录，拒绝执行卸载操作！"
+  log_error "安全拦截: 指定的工作路径 [${WORK_DIR}] 为系统保护目录，拒绝执行卸载操作！"
   exit 1
 fi
 
@@ -112,7 +120,6 @@ if [ -d "${RUNINFO_DIR}" ]; then
   elif [ -f "${RUNINFO_DIR}/runinfo.json" ]; then
     RUNINFO_JSON="${RUNINFO_DIR}/runinfo.json"
   else
-    # 查找任意一个 .json 文件
     CANDIDATE=$(find "${RUNINFO_DIR}" -maxdepth 1 -name "*.json" 2>/dev/null | head -n 1 || true)
     if [ -n "$CANDIDATE" ]; then
       RUNINFO_JSON="$CANDIDATE"
@@ -125,15 +132,19 @@ DEPLOY_MODE=""
 CONTAINER_NAME="lightdrop"
 SERVICE_NAME="lightdrop.service"
 PM2_NAME="lightdrop"
+TASK_NAME="LightDrop"
+PLIST_LABEL="com.lightdrop.server"
+PLIST_PATH=""
 PID_FILE="${RUNINFO_DIR}/lightdrop.pid"
 APP_PID=""
 RECORDED_DATA_DIR="${WORK_DIR}/data"
 RECORDED_LANG="zh"
+AUTOSTART_STATUS=""
 
 if [ -n "$RUNINFO_JSON" ] && [ -f "$RUNINFO_JSON" ]; then
   DEPLOY_MODE=$(json_read "$RUNINFO_JSON" "deployMode")
   [ -z "$DEPLOY_MODE" ] && DEPLOY_MODE=$(json_read "$RUNINFO_JSON" "mode")
-  
+
   c_name=$(json_read "$RUNINFO_JSON" "containerName")
   [ -n "$c_name" ] && CONTAINER_NAME="$c_name"
 
@@ -142,6 +153,12 @@ if [ -n "$RUNINFO_JSON" ] && [ -f "$RUNINFO_JSON" ]; then
 
   p_name=$(json_read "$RUNINFO_JSON" "pm2Name")
   [ -n "$p_name" ] && PM2_NAME="$p_name"
+
+  t_name=$(json_read "$RUNINFO_JSON" "taskName")
+  [ -n "$t_name" ] && TASK_NAME="$t_name"
+
+  pl_path=$(json_read "$RUNINFO_JSON" "plistPath")
+  [ -n "$pl_path" ] && PLIST_PATH="$pl_path"
 
   p_file=$(json_read "$RUNINFO_JSON" "pidFile")
   [ -n "$p_file" ] && PID_FILE="$p_file"
@@ -154,6 +171,9 @@ if [ -n "$RUNINFO_JSON" ] && [ -f "$RUNINFO_JSON" ]; then
 
   r_lang=$(json_read "$RUNINFO_JSON" "language")
   [ -n "$r_lang" ] && RECORDED_LANG="$r_lang"
+
+  a_stat=$(json_read "$RUNINFO_JSON" "autostart")
+  [ -n "$a_stat" ] && AUTOSTART_STATUS="$a_stat"
 fi
 
 # 语言判定
@@ -166,37 +186,48 @@ DATA_DIR="${RECORDED_DATA_DIR}"
 # 打印横幅
 echo ""
 if [ "$LANG_OPT" = "en" ]; then
-  print_banner "LightDrop Uninstallation Engine" "Target WorkDir: ${WORK_DIR}"
+  print_banner "LightDrop Uninstallation Engine" "OS: ${OS_PRETTY} | WorkDir: ${WORK_DIR}"
 else
-  print_banner "LightDrop 卸载与清理引擎" "目标工作路径: ${WORK_DIR}"
+  print_banner "LightDrop 跨平台服务卸载引擎" "系统: ${OS_PRETTY} | 工作路径: ${WORK_DIR}"
 fi
 
 # ----------------- 步骤 1: 审查运行记录与模式分析 -----------------
 if [ "$LANG_OPT" = "en" ]; then
-  log_step "1/4" "Inspecting deployment metadata from runinfo..."
+  log_step "1/4" "Inspecting deployment metadata & lifecycle status..."
 else
-  log_step "1/4" "读取 runinfo 运行记录并判定部署方式..."
+  log_step "1/4" "审查部署元数据与生命周期运行状态..."
 fi
 
 if [ -n "$RUNINFO_JSON" ]; then
-  log_success "找到运行信息记录文件: ${RUNINFO_JSON}"
-  log_info "记录中的部署模式: ${CYAN}${DEPLOY_MODE:-未明确标注}${RESET}"
-  log_info "记录中的数据目录: ${DATA_DIR}"
+  log_success "找到部署运行记录: ${RUNINFO_JSON}"
+  log_info "记录的部署模式: ${CYAN}${DEPLOY_MODE:-未知}${RESET}"
+  log_info "开机自启状态: ${CYAN}${AUTOSTART_STATUS:-未标注}${RESET}"
+  log_info "数据存储目录: ${DATA_DIR}"
 else
-  log_warn "未在 ${RUNINFO_DIR} 中检测到运行记录 JSON 文件，进入自动环境嗅探..."
-  # 自动嗅探模式
-  if command -v docker >/dev/null 2>&1 && docker ps -a --format '{{.Names}}' 2>/dev/null | grep -Eq "^${CONTAINER_NAME}\$"; then
+  log_warn "未在 ${RUNINFO_DIR} 检测到运行记录，进入多系统环境深度嗅探..."
+
+  if [ "$CURRENT_OS" = "macos" ] && { launchctl list 2>/dev/null | grep -q "${PLIST_LABEL}" || [ -f "${HOME}/Library/LaunchAgents/${PLIST_LABEL}.plist" ]; }; then
+    DEPLOY_MODE="launchd"
+    PLIST_PATH="${HOME}/Library/LaunchAgents/${PLIST_LABEL}.plist"
+    log_info "嗅探到正在运行或已注册的 macOS LaunchAgent: ${PLIST_LABEL}"
+  elif command -v docker >/dev/null 2>&1 && docker ps -a --format '{{.Names}}' 2>/dev/null | grep -Eq "^${CONTAINER_NAME}\$"; then
     DEPLOY_MODE="docker"
-    log_info "嗅探到正在运行的 Docker 容器: ${CONTAINER_NAME}"
-  elif [ -f "${PID_FILE}" ]; then
-    DEPLOY_MODE="standalone"
-    log_info "嗅探到 PID 记录文件: ${PID_FILE}"
+    log_info "嗅探到活动中的 Docker 容器: ${CONTAINER_NAME}"
+  elif command -v systemctl >/dev/null 2>&1 && (systemctl is-active --quiet "${SERVICE_NAME}" 2>/dev/null || [ -f "/etc/systemd/system/${SERVICE_NAME}" ]); then
+    DEPLOY_MODE="systemd"
+    log_info "嗅探到 Linux Systemd 服务: ${SERVICE_NAME}"
+  elif [ "$CURRENT_OS" = "windows" ] && schtasks //Query //TN "${TASK_NAME}" >/dev/null 2>&1; then
+    DEPLOY_MODE="task"
+    log_info "嗅探到 Windows 任务计划程序: ${TASK_NAME}"
   elif command -v pm2 >/dev/null 2>&1 && pm2 jlist 2>/dev/null | grep -q "\"${PM2_NAME}\""; then
     DEPLOY_MODE="pm2"
-    log_info "嗅探到 PM2 进程任务: ${PM2_NAME}"
+    log_info "嗅探到活动中的 PM2 进程: ${PM2_NAME}"
+  elif [ -f "${PID_FILE}" ]; then
+    DEPLOY_MODE="standalone"
+    log_info "嗅探到独立进程 PID 文件: ${PID_FILE}"
   else
     DEPLOY_MODE="standalone"
-    log_info "未嗅探到活动服务，将按标准目录执行清理"
+    log_info "未检测到明确活动服务，将按标准目录执行清理"
   fi
 fi
 
@@ -204,16 +235,14 @@ fi
 if [ "$LANG_OPT" = "en" ]; then
   log_step "2/4" "Confirming data retention policy..."
 else
-  log_step "2/4" "确认数据保留与清理决策..."
+  log_step "2/4" "确认数据保留与清理策略..."
 fi
 
 if [ -z "$DELETE_DATA" ]; then
   if [ "$AUTO_YES" = true ]; then
-    # 自动化模式下出于数据安全默认保留
     DELETE_DATA=false
-    log_info "非交互模式 (-y): 出于安全防护，默认保留已上传的数据文件"
+    log_info "非交互模式 (-y): 出于数据安全，默认保留用户上传的数据"
   elif [ -t 0 ]; then
-    # 交互模式弹窗询问
     echo ""
     echo -e "${YELLOW}${BOLD}┌──────────────────────────────────────────────────────────────┐${RESET}"
     if [ "$LANG_OPT" = "en" ]; then
@@ -252,14 +281,80 @@ else
   log_success "决策: 安全保留上传的文件和数据目录 (${DATA_DIR})"
 fi
 
-# ----------------- 步骤 3: 停止并清理运行服务 -----------------
+# ----------------- 步骤 3: 停止并注销系统服务与自启动项 -----------------
 if [ "$LANG_OPT" = "en" ]; then
-  log_step "3/4" "Stopping and removing active LightDrop service [${DEPLOY_MODE}]..."
+  log_step "3/4" "Deregistering service & disabling autostart [${DEPLOY_MODE}]..."
 else
-  log_step "3/4" "停止并注销正在运行的 LightDrop 服务 [${DEPLOY_MODE}]..."
+  log_step "3/4" "停止并注销系统生命周期服务与自启动项 [${DEPLOY_MODE}]..."
 fi
 
 case "$DEPLOY_MODE" in
+  # ----------------- macOS launchd -----------------
+  launchd)
+    if [ -z "$PLIST_PATH" ]; then
+      if [ -f "${HOME}/Library/LaunchAgents/${PLIST_LABEL}.plist" ]; then
+        PLIST_PATH="${HOME}/Library/LaunchAgents/${PLIST_LABEL}.plist"
+      elif [ -f "/Library/LaunchAgents/${PLIST_LABEL}.plist" ]; then
+        PLIST_PATH="/Library/LaunchAgents/${PLIST_LABEL}.plist"
+      fi
+    fi
+
+    log_info "注销并卸载 macOS LaunchAgent 服务..."
+    if [ -n "$PLIST_PATH" ] && [ -f "$PLIST_PATH" ]; then
+      launchctl unload -w "${PLIST_PATH}" 2>/dev/null || true
+      rm -f "${PLIST_PATH}"
+      log_success "已注销并移除 LaunchAgent 属性文件: ${PLIST_PATH}"
+    else
+      launchctl stop "${PLIST_LABEL}" 2>/dev/null || true
+    fi
+
+    # 兜底终止后台 node 实例
+    pkill -f "dist/server/index.js" 2>/dev/null || true
+    log_success "macOS LaunchAgent 服务及开机自启项已成功卸载"
+    ;;
+
+  # ----------------- Linux systemd -----------------
+  systemd)
+    if command -v systemctl >/dev/null 2>&1; then
+      log_info "停止并禁用 Linux Systemd 服务: ${SERVICE_NAME}..."
+      sudo systemctl stop "${SERVICE_NAME}" 2>/dev/null || systemctl --user stop "${SERVICE_NAME}" 2>/dev/null || true
+      sudo systemctl disable "${SERVICE_NAME}" 2>/dev/null || systemctl --user disable "${SERVICE_NAME}" 2>/dev/null || true
+
+      if [ -f "/etc/systemd/system/${SERVICE_NAME}" ]; then
+        sudo rm -f "/etc/systemd/system/${SERVICE_NAME}"
+        sudo systemctl daemon-reload 2>/dev/null || true
+      fi
+      if [ -f "${HOME}/.config/systemd/user/${SERVICE_NAME}" ]; then
+        rm -f "${HOME}/.config/systemd/user/${SERVICE_NAME}"
+        systemctl --user daemon-reload 2>/dev/null || true
+      fi
+      log_success "Linux Systemd 系统服务及开机自启项已成功卸载"
+    fi
+    ;;
+
+  # ----------------- Windows 任务计划程序 (task) -----------------
+  task)
+    log_info "停止并注销 Windows 任务计划程序: ${TASK_NAME}..."
+    schtasks //End //TN "${TASK_NAME}" 2>/dev/null || true
+    schtasks //Delete //TN "${TASK_NAME}" //F 2>/dev/null || true
+    # 终止可能驻留的 node 进程
+    taskkill //F //IM node.exe 2>/dev/null || true
+    log_success "Windows 任务计划程序服务及自启动项已注销"
+    ;;
+
+  # ----------------- Windows 开机自启文件夹 (startup) -----------------
+  startup)
+    log_info "清理 Windows 开机自启动文件夹启动项..."
+    STARTUP_VBS="${APPDATA}/Microsoft/Windows/Start Menu/Programs/Startup/LightDrop.vbs"
+    if [ -f "${STARTUP_VBS}" ]; then
+      rm -f "${STARTUP_VBS}"
+      log_success "已移除开机自启动文件: ${STARTUP_VBS}"
+    fi
+    taskkill //F //IM node.exe 2>/dev/null || true
+    log_success "Windows 启动项已成功清理"
+    ;;
+
+  # ----------------- Docker -----------------
   docker)
     if command -v docker >/dev/null 2>&1; then
       if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -Eq "^${CONTAINER_NAME}\$"; then
@@ -267,28 +362,12 @@ case "$DEPLOY_MODE" in
         docker stop "${CONTAINER_NAME}" >/dev/null 2>&1 || true
         log_info "正在删除 Docker 容器: ${CONTAINER_NAME}..."
         docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
-        log_success "Docker 容器 ${CONTAINER_NAME} 已成功停止并清理"
-      else
-        log_info "未检测到活动的 Docker 容器: ${CONTAINER_NAME}"
+        log_success "Docker 容器 ${CONTAINER_NAME} 已成功移除 (包含自启策略)"
       fi
-    else
-      log_warn "未找到 docker 命令，跳过容器停止"
     fi
     ;;
 
-  systemd)
-    if command -v systemctl >/dev/null 2>&1; then
-      log_info "停止并注销 Systemd 服务: ${SERVICE_NAME}..."
-      sudo systemctl stop "${SERVICE_NAME}" 2>/dev/null || true
-      sudo systemctl disable "${SERVICE_NAME}" 2>/dev/null || true
-      if [ -f "/etc/systemd/system/${SERVICE_NAME}" ]; then
-        sudo rm -f "/etc/systemd/system/${SERVICE_NAME}"
-        sudo systemctl daemon-reload 2>/dev/null || true
-      fi
-      log_success "Systemd 服务已成功卸载"
-    fi
-    ;;
-
+  # ----------------- PM2 -----------------
   pm2)
     if command -v pm2 >/dev/null 2>&1; then
       log_info "停止并删除 PM2 应用: ${PM2_NAME}..."
@@ -298,6 +377,7 @@ case "$DEPLOY_MODE" in
     fi
     ;;
 
+  # ----------------- Standalone -----------------
   standalone)
     TARGET_PID=""
     if [ -f "${PID_FILE}" ]; then
@@ -307,77 +387,74 @@ case "$DEPLOY_MODE" in
     fi
 
     if [ -n "$TARGET_PID" ] && kill -0 "$TARGET_PID" 2>/dev/null; then
-      log_info "正在终止后台进程 (PID: ${TARGET_PID})..."
+      log_info "正在终止后台常驻进程 (PID: ${TARGET_PID})..."
       kill -15 "$TARGET_PID" 2>/dev/null || true
       sleep 1
       if kill -0 "$TARGET_PID" 2>/dev/null; then
         kill -9 "$TARGET_PID" 2>/dev/null || true
       fi
-      log_success "进程 (PID: ${TARGET_PID}) 已终止"
-    else
-      log_info "未发现存活的后台进程"
+      log_success "后台进程 (PID: ${TARGET_PID}) 已成功终止"
     fi
     rm -f "${PID_FILE}" 2>/dev/null || true
     ;;
 
   *)
-    log_info "未知或跳过服务停止阶段"
+    log_info "跳过专用服务停止阶段"
     ;;
 esac
 
-# ----------------- 步骤 4: 清理工作路径内容 -----------------
+# ----------------- 步骤 4: 清理工作路径资产 -----------------
 if [ "$LANG_OPT" = "en" ]; then
-  log_step "4/4" "Cleaning up working directory assets..."
+  log_step "4/4" "Cleaning up working directory files..."
 else
   log_step "4/4" "清理工作路径与部署文件..."
 fi
 
 if [ "$DELETE_DATA" = true ]; then
-  # 彻底删除：先删数据，再删整个工作路径
   if [ -d "${DATA_DIR}" ] && ! is_dangerous_dir "${DATA_DIR}"; then
-    log_info "清理数据目录: ${DATA_DIR}..."
+    log_info "移除数据存储目录: ${DATA_DIR}..."
     rm -rf "${DATA_DIR}"
   fi
 
   if [ -d "${WORK_DIR}" ] && ! is_dangerous_dir "${WORK_DIR}"; then
-    log_info "彻底移除工作路径: ${WORK_DIR}..."
+    log_info "移除完整工作路径: ${WORK_DIR}..."
     rm -rf "${WORK_DIR}"
     log_success "工作路径及所有上传文件已彻底清除"
   fi
 else
-  # 保留数据：只删除 app, runinfo, logs, bin 等运行代码与配置
-  log_info "保留数据目录: ${DATA_DIR}"
+  log_info "安全保留数据目录: ${DATA_DIR}"
 
   for sub in "app" "runinfo" "logs" "bin"; do
     if [ -d "${WORK_DIR}/${sub}" ]; then
-      rm -rf "${WORK_DIR}/${sub}"
+      rm -rf "${WORK_DIR:?}/${sub}"
     fi
   done
   rm -f "${WORK_DIR}/lightdrop.config.json" "${WORK_DIR}/app.log" 2>/dev/null || true
 
-  log_success "服务程序文件与运行配置已清理完毕"
+  log_success "服务运行程序、日志与配置已清理完毕"
 fi
 
 # ----------------- 优雅最终状态信息 -----------------
 echo -e "\n${GREEN}${BOLD}════════════════════════════════════════════════════════════════${RESET}"
 if [ "$LANG_OPT" = "en" ]; then
-  echo -e " ${BOLD}${GREEN}✔ LIGHTDROP UNINSTALLED SUCCESSFULLY${RESET}"
+  echo -e " ${BOLD}${GREEN}✔ LIGHTDROP UNINSTALLED SUCCESSFULLY FROM ${OS_PRETTY}${RESET}"
 else
-  echo -e " ${BOLD}${GREEN}✔ LightDrop 卸载作业全部完成${RESET}"
+  echo -e " ${BOLD}${GREEN}✔ LightDrop 服务已从 ${OS_PRETTY} 完整卸载${RESET}"
 fi
 echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════${RESET}"
 
-print_card_row "卸载对象" "LightDrop 服务实例"
-print_card_row "服务状态" "${RED}○ 已停止并移除 (Stopped & Removed)${RESET}"
+print_card_row "操作系统" "${OS_PRETTY}"
+print_card_row "服务状态" "${RED}○ 已停止并注销 (Stopped & Deregistered)${RESET}"
+print_card_row "自启动项" "${RED}○ 已注销清理 (Autostart Removed)${RESET}"
 print_card_row "工作路径" "${WORK_DIR}"
 
 if [ "$DELETE_DATA" = true ]; then
   print_card_row "数据处理结果" "${RED}已彻底清空 (Purged)${RESET}"
 else
   print_card_row "数据处理结果" "${GREEN}已完整安全保留 (Preserved)${RESET}"
-  echo -e "\n  ${CYAN}ℹ 提示: 用户上传的文件与历史记录已保存在以下目录:${RESET}"
+  echo -e "\n  ${CYAN}ℹ 提示: 用户上传的文件与数据已保留在:${RESET}"
   echo -e "    ${BOLD}${DATA_DIR}${RESET}"
-  echo -e "    ${DIM}如需重新安装部署，可直接指定该数据目录以无缝恢复历史数据。${RESET}"
+  echo -e "    ${DIM}后续若重新部署，直接指定此数据目录即可快速恢复历史文件。${RESET}"
 fi
 
 echo ""
