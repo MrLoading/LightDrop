@@ -44,6 +44,24 @@ server.listen(port, host, () => {
 const handleShutdown = () => {
   console.log('\nShutting down LightDrop gracefully...');
   cleanupService.stop();
+  wsService.stop();
+
+  // 兜底超时强制退出：最多等待 1.5 秒，避免任何挂起连接阻碍退出
+  const forceExit = setTimeout(() => {
+    console.log('Forcefully terminating process.');
+    process.exit(0);
+  }, 1500);
+  forceExit.unref();
+
+  try {
+    if (typeof (server as any).closeAllConnections === 'function') {
+      (server as any).closeAllConnections();
+    }
+    if (typeof (server as any).closeIdleConnections === 'function') {
+      (server as any).closeIdleConnections();
+    }
+  } catch (_) {}
+
   server.close(() => {
     console.log('Server stopped.');
     process.exit(0);

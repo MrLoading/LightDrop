@@ -76,6 +76,21 @@ export class WsService {
       onlineUsers: this.getOnlineCount(),
     });
   }
+
+  public stop(): void {
+    if (this.wss) {
+      this.clients.forEach((client) => {
+        try {
+          client.terminate();
+        } catch (_) {}
+      });
+      this.clients.clear();
+      try {
+        this.wss.close();
+      } catch (_) {}
+      this.wss = null;
+    }
+  }
 }
 
 export const wsService = new WsService();

@@ -139,20 +139,40 @@ docker compose up -d
 
 ---
 
-### 方式二：一键运维脚本 (`deploy.sh`)
+### 方式二：全平台智能运维部署脚本 (`deploy.sh` / `deploy.bat` / `deploy.ps1`)
 
-项目内置跨平台一键部署脚本，支持交互式向导与自动化部署：
+项目内置跨平台一键部署系统，**自动嗅探操作系统环境 (macOS / Linux / Windows)** 并动态匹配最优生命周期管理机制与开机自启动配置：
 
 ```bash
-# 赋予脚本执行权限
-chmod +x deploy.sh package.sh uninstall.sh scripts/*.sh
-
-# 交互式引导部署
+# === macOS / Linux / Windows (Git Bash) ===
+# 交互式向导 (自动检测系统、适配模式与自启动选项)
 ./deploy.sh
 
-# 或一键以独立后台进程启动
-./deploy.sh -m standalone -p 8080
+# 自动选择系统最优原生模式并开启开机自启
+./deploy.sh -m auto --autostart
+
+# macOS 原生 LaunchAgent 守护服务 (免 root、崩溃自动恢复、开机自启)
+./deploy.sh -m launchd --autostart
+
+# Linux 原生 Systemd 系统服务
+./deploy.sh -m systemd --autostart
+
+# Docker 容器化部署 (全平台)
+./deploy.sh -m docker -p 8080 --autostart
 ```
+
+```powershell
+# === Windows 原生 (PowerShell / CMD 双击) ===
+# 双击 deploy.bat 或在 PowerShell 中执行:
+.\deploy.ps1
+
+# Windows 任务计划程序静默后台常驻 (推荐)
+.\deploy.ps1 -Mode task -AutoStart $true
+
+# Windows 开机自启文件夹模式 (免管理员权限)
+.\deploy.ps1 -Mode startup -AutoStart $true
+```
+
 
 ---
 
@@ -195,11 +215,12 @@ LightDrop/
 
 ## 📦 自动化运维体系
 
-| 脚本 | 用途 | 常用命令 |
-| :--- | :--- | :--- |
-| `deploy.sh` | 部署管理（支持 Docker / Standalone / PM2 / Systemd） | `./deploy.sh -m standalone -p 8080` |
-| `package.sh` | 多形态发行打包（Docker TAR 离线包 / 独立免编运行包） | `./package.sh --all` |
-| `uninstall.sh` | 服务精准清理（支持保留历史数据或彻底擦除） | `./uninstall.sh --keep-data` |
+| 脚本 | 适用平台 | 生命周期支持 | 常用命令 |
+| :--- | :--- | :--- | :--- |
+| `deploy.sh` / `deploy.bat` / `deploy.ps1` | macOS / Linux / Windows | **macOS**: `launchd` (LaunchAgent)<br>**Linux**: `systemd`<br>**Windows**: `task` / `startup`<br>**全平台**: `docker` / `pm2` / `standalone` | `./deploy.sh -m auto --autostart`<br>`.\deploy.ps1 -Mode task` |
+| `package.sh` | Linux / macOS / Git Bash | 多形态发行打包 (Docker TAR 离线镜像 / 原生免编独立发行包) | `./package.sh --all` |
+| `uninstall.sh` / `uninstall.bat` / `uninstall.ps1` | macOS / Linux / Windows | 精准停用服务、注销自启动项，支持数据保留或全量清除 | `./uninstall.sh --keep-data`<br>`.\uninstall.ps1 -DeleteData` |
+
 
 ---
 

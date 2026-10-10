@@ -138,20 +138,40 @@ Visit `http://<YOUR_LAN_IP>:8080` in your browser.
 
 ---
 
-### Method 2: Automated Deployment Script (`deploy.sh`)
+### Method 2: Smart Cross-Platform Deployment Scripts (`deploy.sh` / `deploy.bat` / `deploy.ps1`)
 
-LightDrop includes a battle-tested cross-platform management script:
+LightDrop includes an intelligent deployment framework that **auto-detects the operating system (macOS / Linux / Windows)** and configures the native lifecycle manager and autostart policy accordingly:
 
 ```bash
-# Grant execution permissions
-chmod +x deploy.sh package.sh uninstall.sh scripts/*.sh
-
-# Run interactive setup wizard
+# === macOS / Linux / Windows (Git Bash) ===
+# Interactive wizard (auto-detects OS, guides mode and autostart selection)
 ./deploy.sh
 
-# Or start as a standalone background daemon
-./deploy.sh -m standalone -p 8080
+# Automatically deploy using the best native mode with autostart enabled
+./deploy.sh -m auto --autostart
+
+# macOS native LaunchAgent daemon (no root needed, crash recovery, login autostart)
+./deploy.sh -m launchd --autostart
+
+# Linux native Systemd system service
+./deploy.sh -m systemd --autostart
+
+# Docker containerized deployment (Cross-platform)
+./deploy.sh -m docker -p 8080 --autostart
 ```
+
+```powershell
+# === Windows Native (PowerShell / CMD Double-click) ===
+# Double-click deploy.bat or run in PowerShell:
+.\deploy.ps1
+
+# Windows Task Scheduler silent daemon (Recommended)
+.\deploy.ps1 -Mode task -AutoStart $true
+
+# Windows Startup folder mode (No admin rights required)
+.\deploy.ps1 -Mode startup -AutoStart $true
+```
+
 
 ---
 
@@ -194,11 +214,12 @@ LightDrop/
 
 ## 📦 DevOps Tooling
 
-| Script | Purpose | Example Command |
-| :--- | :--- | :--- |
-| `deploy.sh` | Deployment management (Docker, Standalone, PM2, Systemd) | `./deploy.sh -m standalone -p 8080` |
-| `package.sh` | Multi-target packaging (Offline Docker TAR / Standalone binary) | `./package.sh --all` |
-| `uninstall.sh` | Clean uninstallation (Safe data retention or total wipe) | `./uninstall.sh --keep-data` |
+| Script | Supported Platforms | Lifecycle Modes | Example Command |
+| :--- | :--- | :--- | :--- |
+| `deploy.sh` / `deploy.bat` / `deploy.ps1` | macOS / Linux / Windows | **macOS**: `launchd` (LaunchAgent)<br>**Linux**: `systemd`<br>**Windows**: `task` / `startup`<br>**Cross-Platform**: `docker` / `pm2` / `standalone` | `./deploy.sh -m auto --autostart`<br>`.\deploy.ps1 -Mode task` |
+| `package.sh` | Linux / macOS / Git Bash | Multi-target packaging (Offline Docker TAR / Standalone binary) | `./package.sh --all` |
+| `uninstall.sh` / `uninstall.bat` / `uninstall.ps1` | macOS / Linux / Windows | Cleanly stop services, deregister autostart items, support safe data retention or total wipe | `./uninstall.sh --keep-data`<br>`.\uninstall.ps1 -DeleteData` |
+
 
 ---
 
