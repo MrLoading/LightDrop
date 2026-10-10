@@ -32,9 +32,18 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $ScriptDir
 
+$Version = "1.0.0"
+$PkgJsonPath = Join-Path $RepoRoot "package.json"
+if (Test-Path $PkgJsonPath) {
+    try {
+        $PkgObj = Get-Content $PkgJsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($PkgObj.version) { $Version = $PkgObj.version }
+    } catch {}
+}
+
 if ($Help) {
     Write-Host @"
-LightDrop Windows 构建与部署工具
+LightDrop Windows 构建与部署工具 - v$Version
 
 用法:
   .\deploy.ps1 [选项]
@@ -158,6 +167,14 @@ if ($SkipBuild -and (Test-Path "$RepoRoot\dist\client") -and (Test-Path "$RepoRo
     Write-Host "  ℹ 检测到已有构建产物，跳过编译"
 } else {
     Push-Location $RepoRoot
+    if (-not (Test-Path "$RepoRoot\node_modules")) {
+        Write-Host "  ℹ 未检测到项目依赖库 node_modules，正在执行自动安装..."
+        if (Get-Command "pnpm" -ErrorAction SilentlyContinue) {
+            pnpm install
+        } elseif (Get-Command "npm" -ErrorAction SilentlyContinue) {
+            npm install
+        }
+    }
     Remove-Item "tsconfig.server.tsbuildinfo", "tsconfig.client.tsbuildinfo" -ErrorAction SilentlyContinue
     if (Get-Command "pnpm" -ErrorAction SilentlyContinue) {
         pnpm build
@@ -174,6 +191,7 @@ if ($SkipBuild -and (Test-Path "$RepoRoot\dist\client") -and (Test-Path "$RepoRo
 Write-Host "`n━━━ [3/5] 装配运行资源与配置文件 ━━━" -ForegroundColor Cyan
 if ($Mode -ne "docker") {
     New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
+    Remove-Item -Recurse -Force "$AppDir\dist", "$AppDir\public" -ErrorAction SilentlyContinue
     Copy-Item -Recurse -Force "$RepoRoot\dist" "$AppDir\dist"
     Copy-Item -Recurse -Force "$RepoRoot\public" "$AppDir\public"
     Copy-Item -Force "$RepoRoot\package.json" "$AppDir\package.json"
@@ -199,10 +217,10 @@ Write-Host "`n━━━ [4/5] 配置生命周期并启动服务 [$Mode] ━━�
 # 生成静默启动 VBScript
 $SilentVbsContent = @"
 Set WshShell = CreateObject("WScript.Shell")
-WshShell.CurrentDirectory = "$($AppDir.Replace('\', '\\'))"
+WshShell.CurrentDirectory = "$AppDir"
 WshShell.Environment("PROCESS")("PORT") = "$Port"
 WshShell.Environment("PROCESS")("NODE_ENV") = "production"
-WshShell.Run """$($NodeBin.Replace('\', '\\'))"" dist\server\index.js", 0, False
+WshShell.Run """$NodeBin"" dist\server\index.js", 0, False
 "@
 Set-Content -Path "$AppDir\run_silent.vbs" -Value $SilentVbsContent -Encoding UTF8
 
@@ -239,8 +257,9 @@ switch ($Mode) {
     }
     "pm2" {
         Push-Location $AppDir
+        $env:PORT = "$Port"
         pm2 delete $Pm2Name 2>$null | Out-Null
-        pm2 start ecosystem.config.cjs --name $Pm2Name --env production
+        pm2 start ecosystem.config.cjs --name $Pm2Name --env production --update-env
         pm2 save | Out-Null
         Pop-Location
         Write-Host "  ✓ PM2 服务托管成功" -ForegroundColor Green
@@ -253,12 +272,15 @@ switch ($Mode) {
 
 Write-Host "`n━━━ [5/5] 记录运行信息至持久化归档 ━━━" -ForegroundColor Cyan
 $CurrentTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-$LocalIp = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notlike "*Loopback*" -and $_.IPAddress -notlike "169.254*" } | Select-Object -First 1).IPAddress
+$LocalIp = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notlike "*Loopback*" -and $_.IPAddress -notlike "169.254*" -and $_.InterfaceAlias -notlike "*vEthernet*" -and $_.InterfaceAlias -notlike "*Virtual*" -and $_.InterfaceAlias -notlike "*WSL*" } | Select-Object -First 1).IPAddress
+if (-not $LocalIp) {
+    $LocalIp = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notlike "*Loopback*" -and $_.IPAddress -notlike "169.254*" } | Select-Object -First 1).IPAddress
+}
 if (-not $LocalIp) { $LocalIp = "127.0.0.1" }
 
 $RunInfoObj = @{
     appName = "lightdrop"
-    version = "1.0.0"
+    version = $Version
     os = "windows"
     osPretty = "Windows"
     deployMode = $Mode

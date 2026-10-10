@@ -12,7 +12,7 @@ module.exports = {
       max_memory_restart: '500M',
       env: {
         NODE_ENV: 'production',
-        PORT: 8080,
+        PORT: process.env.PORT ? Number(process.env.PORT) : 8080,
       },
       error_file: './logs/error.log',
       out_file: './logs/out.log',

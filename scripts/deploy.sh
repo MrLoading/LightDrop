@@ -490,6 +490,14 @@ elif [ "$SKIP_BUILD" = true ] && [ -d "${REPO_ROOT}/dist/client" ] && [ -d "${RE
   log_info "已检测到已有构建产物，跳过编译步骤 (--skip-build)"
 else
   cd "${REPO_ROOT}"
+  if [ ! -d "${REPO_ROOT}/node_modules" ]; then
+    log_info "未检测到项目依赖库 node_modules，正在执行自动安装..."
+    if command -v pnpm >/dev/null 2>&1; then
+      pnpm install
+    elif command -v npm >/dev/null 2>&1; then
+      npm install
+    fi
+  fi
   rm -f "${REPO_ROOT}/tsconfig.server.tsbuildinfo" "${REPO_ROOT}/tsconfig.client.tsbuildinfo"
   if command -v pnpm >/dev/null 2>&1; then
     pnpm build
@@ -515,6 +523,7 @@ APP_PID=""
 if [ "$DEPLOY_MODE" != "docker" ]; then
   mkdir -p "${APP_DIR}"
   log_info "同步应用产物至目标目录: ${APP_DIR}..."
+  rm -rf "${APP_DIR}/dist" "${APP_DIR}/public"
   cp -r "${REPO_ROOT}/dist" "${APP_DIR}/"
   cp -r "${REPO_ROOT}/public" "${APP_DIR}/"
   cp "${REPO_ROOT}/package.json" "${APP_DIR}/"
@@ -821,7 +830,7 @@ VBS_EOF
 
     cd "${APP_DIR}"
     pm2 delete "${PM2_NAME}" >/dev/null 2>&1 || true
-    pm2 start ecosystem.config.cjs --name "${PM2_NAME}" --env production
+    PORT="${PORT}" pm2 start ecosystem.config.cjs --name "${PM2_NAME}" --env production --update-env
     pm2 save >/dev/null 2>&1 || true
 
     if [ "$AUTOSTART" = true ]; then

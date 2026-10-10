@@ -337,8 +337,10 @@ case "$DEPLOY_MODE" in
     log_info "停止并注销 Windows 任务计划程序: ${TASK_NAME}..."
     schtasks //End //TN "${TASK_NAME}" 2>/dev/null || true
     schtasks //Delete //TN "${TASK_NAME}" //F 2>/dev/null || true
-    # 终止可能驻留的 node 进程
-    taskkill //F //IM node.exe 2>/dev/null || true
+    # 精准终止 LightDrop node 进程，避免误杀其它 node 应用
+    if command -v powershell >/dev/null 2>&1; then
+      powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"name = 'node.exe'\" -ErrorAction SilentlyContinue | Where-Object { \$_.CommandLine -like '*dist*server*index.js*' -or \$_.CommandLine -like '*${APP_DIR}*' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }" 2>/dev/null || true
+    fi
     log_success "Windows 任务计划程序服务及自启动项已注销"
     ;;
 
@@ -350,7 +352,9 @@ case "$DEPLOY_MODE" in
       rm -f "${STARTUP_VBS}"
       log_success "已移除开机自启动文件: ${STARTUP_VBS}"
     fi
-    taskkill //F //IM node.exe 2>/dev/null || true
+    if command -v powershell >/dev/null 2>&1; then
+      powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"name = 'node.exe'\" -ErrorAction SilentlyContinue | Where-Object { \$_.CommandLine -like '*dist*server*index.js*' -or \$_.CommandLine -like '*${APP_DIR}*' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }" 2>/dev/null || true
+    fi
     log_success "Windows 启动项已成功清理"
     ;;
 
@@ -395,6 +399,7 @@ case "$DEPLOY_MODE" in
       fi
       log_success "后台进程 (PID: ${TARGET_PID}) 已成功终止"
     fi
+    pkill -f "${APP_DIR}/dist/server/index.js" 2>/dev/null || true
     rm -f "${PID_FILE}" 2>/dev/null || true
     ;;
 

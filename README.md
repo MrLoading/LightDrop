@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./public/icons/icon-192x192.png" width="120" height="120" alt="LightDrop Logo" style="border-radius: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);" />
+  <img src="./public/icons/icon-192.png" width="120" height="120" alt="LightDrop Logo" style="border-radius: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);" />
 </p>
 
 <h1 align="center">⚡ LightDrop</h1>
@@ -30,7 +30,7 @@
 - [🌟 核心功能特性](#-核心功能特性)
 - [🚀 快速开始](#-快速开始)
   - [方式一：Docker Compose（推荐）](#方式一docker-compose推荐)
-  - [方式二：一键运维脚本 (`deploy.sh`)](#方式二一键运维脚本-deploysh)
+  - [方式二：全平台智能运维部署脚本 (`deploy.sh` / `deploy.bat` / `deploy.ps1`)](#方式二全平台智能运维部署脚本-deploysh--deploybat--deployps1)
   - [方式三：本地源码运行](#方式三本地源码运行)
 - [📐 架构设计与技术栈](#-架构设计与技术栈)
 - [📦 自动化运维体系](#-自动化运维体系)

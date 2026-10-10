@@ -94,7 +94,8 @@ switch ($DeployMode) {
     "task" {
         schtasks.exe /End /TN $TaskName 2>$null | Out-Null
         schtasks.exe /Delete /TN $TaskName /F 2>$null | Out-Null
-        Get-Process "node" -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*node*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+        # 精准终止 LightDrop node 进程，避免误杀其它 node 应用
+        Get-CimInstance Win32_Process -Filter "name = 'node.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*dist*server*index.js*" -or $_.CommandLine -like "*$WorkDir*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
         Write-Host "  ✓ 任务计划程序 ($TaskName) 已注销" -ForegroundColor Green
     }
     "startup" {
@@ -103,7 +104,8 @@ switch ($DeployMode) {
             Remove-Item -Force $StartupFile
             Write-Host "  ✓ 开机自启项已移除: $StartupFile" -ForegroundColor Green
         }
-        Get-Process "node" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Get-CimInstance Win32_Process -Filter "name = 'node.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*dist*server*index.js*" -or $_.CommandLine -like "*$WorkDir*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        Write-Host "  ✓ 开机自启项已清理" -ForegroundColor Green
     }
     "docker" {
         docker stop $ContainerName 2>$null | Out-Null
@@ -116,7 +118,7 @@ switch ($DeployMode) {
         Write-Host "  ✓ PM2 任务已移除: $Pm2Name" -ForegroundColor Green
     }
     Default {
-        Get-Process "node" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Get-CimInstance Win32_Process -Filter "name = 'node.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*dist*server*index.js*" -or $_.CommandLine -like "*$WorkDir*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     }
 }
 

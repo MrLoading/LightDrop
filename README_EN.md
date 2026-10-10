@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./public/icons/icon-192x192.png" width="120" height="120" alt="LightDrop Logo" style="border-radius: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);" />
+  <img src="./public/icons/icon-192.png" width="120" height="120" alt="LightDrop Logo" style="border-radius: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);" />
 </p>
 
 <h1 align="center">⚡ LightDrop</h1>
@@ -30,7 +30,7 @@
 - [🌟 Key Features](#-key-features)
 - [🚀 Quick Start](#-quick-start)
   - [Method 1: Docker Compose (Recommended)](#method-1-docker-compose-recommended)
-  - [Method 2: Automated Deployment Script (`deploy.sh`)](#method-2-automated-deployment-script-deploysh)
+  - [Method 2: Smart Cross-Platform Deployment Scripts (`deploy.sh` / `deploy.bat` / `deploy.ps1`)](#method-2-smart-cross-platform-deployment-scripts-deploysh--deploybat--deployps1)
   - [Method 3: Build & Run from Source](#method-3-build--run-from-source)
 - [📐 Architecture & Tech Stack](#-architecture--tech-stack)
 - [📦 DevOps Tooling](#-devops-tooling)
