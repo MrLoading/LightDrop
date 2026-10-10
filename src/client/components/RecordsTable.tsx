@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   FileText,
   File,
@@ -19,10 +19,11 @@ import {
   Link2,
   QrCode,
   Eye,
+  Maximize2,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ShareItem, ShareItemType, SystemStats } from '@shared/types';
-import { formatBytes, formatDisplayTime, getFileTypeLabel } from '../utils/format';
+import { formatBytes, formatDisplayTime, getFileTypeLabel, isImageItem } from '../utils/format';
 import { copyToClipboard } from '../utils/clipboard';
 import { PasswordModal } from './PasswordModal';
 import { AuditLogModal } from './AuditLogModal';
@@ -31,6 +32,7 @@ import { FileQrModal } from './FileQrModal';
 import { TextMarkdownModal } from './TextMarkdownModal';
 import { ShareInfoModal } from './ShareInfoModal';
 import { ClearRecordsModal, ClearRecordsOptions } from './ClearRecordsModal';
+import { ImageViewerModal } from './ImageViewerModal';
 import { getCharacterInfo, getDisplayNickname } from '../utils/nickname';
 
 interface RecordsTableProps {
@@ -180,12 +182,20 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
   const [pwdModalState, setPwdModalState] = useState<{
     isOpen: boolean;
     item: ShareItem | null;
-    actionType: 'copy' | 'download' | 'preview' | 'view_markdown';
+    actionType: 'copy' | 'download' | 'preview' | 'view_markdown' | 'view_image';
   }>({
     isOpen: false,
     item: null,
     actionType: 'copy',
   });
+
+  // 全屏查看图片状态
+  const [imageViewerItem, setImageViewerItem] = useState<{ item: ShareItem; password?: string } | null>(null);
+
+  // 获取当前所有图片记录，供全屏查看时快速上/下一张切换
+  const allImageItems = useMemo(() => {
+    return records.filter((r) => isImageItem(r));
+  }, [records]);
 
   // 触发复制 (若文本受密码保护且尚未解密，先弹窗校验；若已解密则直接复制)
   const handleCopyClick = async (item: ShareItem) => {
@@ -231,6 +241,19 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
     setPreviewItem(item);
   };
 
+  // 触发全屏查看图片
+  const handleViewImageClick = async (item: ShareItem) => {
+    if (item.hasPassword && !item.password) {
+      setPwdModalState({
+        isOpen: true,
+        item,
+        actionType: 'view_image',
+      });
+      return;
+    }
+    setImageViewerItem({ item, password: item.password });
+  };
+
   // 触发查看 Markdown 大弹窗
   const handleViewMarkdownClick = async (item: ShareItem) => {
     if (item.hasPassword && !item.content) {
@@ -271,6 +294,12 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
       setMarkdownModalItem({
         ...item,
         content: decryptedContent,
+      });
+    } else if (pwdModalState.actionType === 'view_image') {
+      await verifyPassword(item.id, password);
+      setImageViewerItem({
+        item: { ...item, password },
+        password,
       });
     }
   };
@@ -331,6 +360,64 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
     return (
       <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
         <File className="w-4 h-4" />
+      </div>
+    );
+  };
+
+  const getFileLargeIcon = (item: ShareItem) => {
+    if (item.type === 'folder') {
+      return (
+        <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0 shadow-xs border border-amber-200/60">
+          <FolderArchive className="w-7 h-7" />
+        </div>
+      );
+    }
+    const ext = (item.extension || (item.fileName ? item.fileName.split('.').pop() : '') || '').toLowerCase();
+    if (['doc', 'docx'].includes(ext)) {
+      return (
+        <div className="w-14 h-14 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 shadow-xs border border-blue-200/60">
+          <FileText className="w-7 h-7" />
+        </div>
+      );
+    }
+    if (['xls', 'xlsx', 'csv'].includes(ext)) {
+      return (
+        <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0 shadow-xs border border-emerald-200/60">
+          <FileText className="w-7 h-7" />
+        </div>
+      );
+    }
+    if (['ppt', 'pptx'].includes(ext)) {
+      return (
+        <div className="w-14 h-14 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 shadow-xs border border-orange-200/60">
+          <FileText className="w-7 h-7" />
+        </div>
+      );
+    }
+    if (['pdf'].includes(ext)) {
+      return (
+        <div className="w-14 h-14 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 shadow-xs border border-rose-200/60">
+          <File className="w-7 h-7" />
+        </div>
+      );
+    }
+    if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz'].includes(ext)) {
+      return (
+        <div className="w-14 h-14 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0 shadow-xs border border-purple-200/60">
+          <FolderArchive className="w-7 h-7" />
+        </div>
+      );
+    }
+    if (['ts', 'tsx', 'js', 'jsx', 'py', 'java', 'c', 'cpp', 'html', 'css', 'json', 'sql', 'sh'].includes(ext)) {
+      return (
+        <div className="w-14 h-14 rounded-2xl bg-violet-100 text-violet-600 flex items-center justify-center shrink-0 shadow-xs border border-violet-200/60">
+          <FileCode className="w-7 h-7" />
+        </div>
+      );
+    }
+    return (
+      <div className="w-14 h-14 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 shadow-xs border border-indigo-200/60">
+        <File className="w-7 h-7" />
       </div>
     );
   };
@@ -509,9 +596,25 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
 
                     {/* 类型 */}
                     <td className="py-3 px-3 whitespace-nowrap shrink-0">
-                      <div className="flex items-center gap-1.5 whitespace-nowrap">
+                      <div
+                        className={`flex items-center gap-1.5 whitespace-nowrap ${
+                          isImageItem(item) ? 'cursor-pointer group/type' : ''
+                        }`}
+                        onClick={() => {
+                          if (isImageItem(item)) {
+                            handleViewImageClick(item);
+                          }
+                        }}
+                        title={isImageItem(item) ? t('records.clickToViewImage', '点击全屏查看图片') : undefined}
+                      >
                         {getRecordIcon(item)}
-                        <span className="text-slate-600 font-medium whitespace-nowrap">
+                        <span
+                          className={`font-medium whitespace-nowrap transition ${
+                            isImageItem(item)
+                              ? 'text-slate-600 group-hover/type:text-blue-600 group-hover/type:underline underline-offset-2'
+                              : 'text-slate-600'
+                          }`}
+                        >
                           {item.type === 'text'
                             ? t('records.typeText')
                             : item.type === 'image'
@@ -540,7 +643,15 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                             </a>
                           ) : (
                             <span
-                              onClick={() => (item.type === 'text' ? handleViewMarkdownClick(item) : handlePreviewClick(item))}
+                              onClick={() => {
+                                if (item.type === 'text') {
+                                  handleViewMarkdownClick(item);
+                                } else if (isImageItem(item)) {
+                                  handleViewImageClick(item);
+                                } else {
+                                  handlePreviewClick(item);
+                                }
+                              }}
                               className="font-medium text-slate-800 hover:text-blue-600 cursor-pointer truncate max-w-full"
                               title={item.type === 'text' ? item.content || item.title : item.fileName || item.title}
                             >
@@ -791,26 +902,155 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                 <span>{t('records.previewTime', { time: formatDisplayTime(previewItem.createdAt) })}</span>
               </div>
 
-              {previewItem.type === 'image' ? (
-                <div className="flex justify-center p-2 bg-slate-50 rounded-xl border border-slate-200/80 max-h-64 overflow-hidden">
+              {isImageItem(previewItem) ? (
+                <div
+                  onClick={() => handleViewImageClick(previewItem)}
+                  className="relative group/img flex justify-center p-2 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-200/80 max-h-64 overflow-hidden cursor-zoom-in transition"
+                  title={t('records.clickToViewImage', '点击全屏查看图片')}
+                >
                   <img
                     src={getItemDirectUrl(previewItem)}
                     alt={previewItem.title || previewItem.fileName}
-                    className="max-h-60 object-contain rounded-lg shadow-2xs"
+                    className="max-h-60 object-contain rounded-lg shadow-2xs group-hover/img:scale-[1.02] transition duration-200"
                   />
+                  <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-[1px] opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-all duration-200 rounded-xl">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/75 text-white text-xs font-medium shadow-lg backdrop-blur-md">
+                      <Maximize2 className="w-3.5 h-3.5 text-white" />
+                      {t('preview.clickToFullscreen', '点击全屏查看')}
+                    </span>
+                  </div>
                 </div>
-              ) : previewItem.content ? (
-                <div className="bg-slate-50 rounded-xl p-3 text-xs font-mono text-slate-700 max-h-60 overflow-y-auto whitespace-pre-wrap select-text border border-slate-200/80">
-                  {previewItem.content}
-                </div>
+              ) : previewItem.type === 'text' ? (
+                previewItem.hasPassword && !previewItem.content ? (
+                  <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-6 text-center flex flex-col items-center justify-center gap-2.5">
+                    <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center">
+                      <Lock className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-amber-900">{t('records.textPasswordProtected')}</p>
+                      <p className="text-[11px] text-amber-700/80 mt-0.5">{t('records.verifyPasswordToRead')}</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setPwdModalState({
+                          isOpen: true,
+                          item: previewItem,
+                          actionType: 'preview',
+                        });
+                      }}
+                      className="mt-1 px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium shadow-xs transition"
+                    >
+                      {t('records.enterPasswordToView')}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 rounded-xl p-3 text-xs font-mono text-slate-700 max-h-60 overflow-y-auto whitespace-pre-wrap select-text border border-slate-200/80">
+                    {previewItem.content || t('records.noContent')}
+                  </div>
+                )
               ) : (
-                <div className="bg-slate-50 rounded-xl p-6 text-center text-xs text-slate-400 border border-dashed border-slate-200">
-                  {previewItem.preview || t('records.previewProtectedPlaceholder')}
+                /* 文件或文件夹类型详情卡片 */
+                <div className="bg-slate-50/80 rounded-2xl p-4 sm:p-5 border border-slate-200/70 flex flex-col gap-3">
+                  <div className="flex items-center gap-3.5">
+                    {getFileLargeIcon(previewItem)}
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <h4
+                        className="text-xs sm:text-sm font-semibold text-slate-800 truncate"
+                        title={previewItem.fileName || previewItem.title}
+                      >
+                        {previewItem.fileName || previewItem.title}
+                      </h4>
+                      <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-1 flex-wrap">
+                        <span className="font-medium text-slate-700">{formatBytes(previewItem.fileSize)}</span>
+                        <span>·</span>
+                        <span>{getFileTypeLabel(previewItem.fileName, previewItem.extension, previewItem.mimeType)}</span>
+                        {previewItem.extension && (
+                          <span className="px-1.5 py-0.2 rounded bg-slate-200/80 text-[10px] font-bold text-slate-600 uppercase font-mono">
+                            {previewItem.extension}
+                          </span>
+                        )}
+                        {previewItem.type === 'folder' && previewItem.fileCount !== undefined && (
+                          <span className="text-amber-700 font-medium">
+                            ({t('preview.folderWithCount', { count: previewItem.fileCount })})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 权限状态提示横幅 */}
+                  {previewItem.hasPassword ? (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200/70 text-amber-800 text-xs">
+                      <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+                      <div className="min-w-0 flex-1 leading-snug">
+                        <span className="font-medium">{t('records.fileEncryptedStatus')}</span>
+                        <span className="text-[11px] text-amber-700/80 block sm:inline sm:ml-1.5">
+                          {t('records.fileEncryptedTip')}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200/70 text-emerald-800 text-xs">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div className="min-w-0 flex-1 leading-snug">
+                        <span className="font-medium">{t('records.filePublicStatus')}</span>
+                        <span className="text-[11px] text-emerald-700/80 block sm:inline sm:ml-1.5">
+                          {t('records.filePublicTip')}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 快捷操作：复制直链与二维码 */}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 text-xs text-slate-500">
+                    <span className="text-[11px] text-slate-400">
+                      {t('records.tipClickDownloadBelow')}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleCopyDownloadLink(previewItem)}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 text-[11px] font-medium shadow-2xs transition active:scale-95"
+                        title={t('records.tipCopyLink')}
+                      >
+                        {copiedLinkId === previewItem.id ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-500" />
+                            <span className="text-emerald-600">{t('records.copied')}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Link2 className="w-3 h-3" />
+                            <span>{t('records.copyLink')}</span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => handleOpenItemQr(previewItem)}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 text-[11px] font-medium shadow-2xs transition active:scale-95"
+                        title={t('records.tipFileQr')}
+                      >
+                        <QrCode className="w-3 h-3" />
+                        <span>{t('records.qr')}</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
 
             <div className="flex justify-end gap-2">
+              {isImageItem(previewItem) && (
+                <button
+                  onClick={() => {
+                    handleViewImageClick(previewItem);
+                  }}
+                  className="px-3.5 py-2 bg-emerald-600 text-white rounded-xl text-xs font-medium hover:bg-emerald-700 transition flex items-center gap-1.5 shadow-sm active:scale-95"
+                  title={t('preview.viewFullscreen', '全屏查看')}
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span>{t('preview.viewFullscreen', '全屏查看')}</span>
+                </button>
+              )}
               {previewItem.type === 'text' ? (
                 <button
                   onClick={() => {
@@ -910,6 +1150,19 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
           await onClearAll(opts);
         }}
       />
+
+      {/* 图片全屏查看大弹窗 */}
+      {imageViewerItem && (
+        <ImageViewerModal
+          isOpen={Boolean(imageViewerItem)}
+          onClose={() => setImageViewerItem(null)}
+          item={imageViewerItem.item}
+          allImageItems={allImageItems}
+          password={imageViewerItem.password}
+          onDownload={onDownload}
+          currentAccessUrl={currentAccessUrl}
+        />
+      )}
     </div>
   );
 };

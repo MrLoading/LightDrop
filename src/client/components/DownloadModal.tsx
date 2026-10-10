@@ -12,6 +12,9 @@ import {
   Loader2,
   HardDrive,
   Info,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ShareItem } from '../../shared/types.js';
@@ -28,6 +31,11 @@ import {
   saveFileToDirectoryHandle,
   triggerBrowserFallbackDownload,
 } from '../utils/downloadManager';
+import {
+  getOperatingSystem,
+  getOsDisplayName,
+  getOsDownloadsFolderName,
+} from '../utils/platform';
 
 interface DownloadModalProps {
   isOpen: boolean;
@@ -44,7 +52,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
   password,
   onSuccess,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [selectedType, setSelectedType] = useState<DownloadDestinationType>('browser_default');
   const [directoryInfo, setDirectoryInfo] = useState<SavedDirectoryInfo>({
     type: 'browser_default',
@@ -60,8 +68,14 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
   });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showBlockedNotice, setShowBlockedNotice] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   const isSupported = isDirectoryPickerSupported();
+  const os = getOperatingSystem();
+  const isMac = os === 'macos';
+  const isEnglish = i18n?.language ? i18n.language.startsWith('en') : false;
+  const osName = getOsDisplayName(os);
+  const osFolder = getOsDownloadsFolderName(os, isEnglish);
 
   // 每次打开弹窗时，读取浏览器缓存的下载设置信息
   useEffect(() => {
@@ -88,7 +102,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
   const fileName = getRecordDownloadFileName(item);
   const downloadUrl = buildDownloadUrl(item, password);
 
-  // 切换为系统默认下载目录模式 (Mac 原生下载文件夹)
+  // 切换为系统默认下载目录模式
   const handleSelectDefault = async () => {
     setSelectedType('browser_default');
     setErrorMessage(null);
@@ -116,7 +130,6 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
       setSelectedType('custom_directory');
     } catch (err: any) {
       if (err?.name === 'AbortError') {
-        // 用户可能在 macOS/Chrome 弹窗“因为其中含有系统文件”点击了取消
         setShowBlockedNotice(true);
       } else {
         setErrorMessage(err?.message || t('downloadModal.changeDirFailed', '选择目录失败'));
@@ -136,7 +149,11 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
         await setBrowserDefaultDownload();
         triggerBrowserFallbackDownload(downloadUrl, fileName);
         if (onSuccess) {
-          onSuccess(t('downloadModal.destDefaultTitle', '系统默认下载目录 (Mac 下载文件夹)'), fileName);
+          const defaultTitle = t('downloadModal.destDefaultTitle', {
+            osFolder,
+            defaultValue: `系统默认下载目录 (${osFolder})`,
+          });
+          onSuccess(defaultTitle, fileName);
         }
         onClose();
         return;
@@ -261,7 +278,9 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                 {t('downloadModal.saveDir', '本机保存目录')}
               </span>
               <span className="text-[10px] text-slate-400">
-                {t('downloadModal.firstChooseTip', '选择后将永久记住，可随时修改')}
+                {isSupported
+                  ? t('downloadModal.firstChooseTip', '选择后将永久记住，可随时修改')
+                  : t('downloadModal.managedDirTip', '当前由浏览器下载管理器自动处理')}
               </span>
             </div>
 
@@ -270,9 +289,90 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 <span>{t('downloadModal.readingSavedDir', '正在读取浏览器已记住的目录...')}</span>
               </div>
+            ) : !isSupported ? (
+              /* 不支持 File System Access API 时的展示 (如局域网 HTTP 或不支持该特性的浏览器) */
+              <div className="space-y-2.5">
+                {/* 默认托管卡片 */}
+                <div className="p-3.5 rounded-xl border border-blue-200/90 bg-blue-50/50 shadow-2xs flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-blue-100/90 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
+                    <HardDrive className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1 flex-wrap">
+                      <span className="text-xs font-bold text-slate-800">
+                        {t('downloadModal.destDefaultTitle', {
+                          osFolder,
+                          defaultValue: `系统默认下载目录 (${osFolder})`,
+                        })}
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium shrink-0">
+                        <CheckCircle2 className="w-2.5 h-2.5" />
+                        {t('downloadModal.browserManagedBadge', '浏览器托管 · 免授权')}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                      {t('downloadModal.browserManagedDesc', {
+                        osName,
+                        defaultValue: `文件将直接由浏览器保存至 ${osName}「下载」文件夹，免授权、最稳定快速。`,
+                      })}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 友好引导卡片：解释为什么无法在局域网网页直接选目录，并告诉用户如何在浏览器端实现自选目录 */}
+                <div className="rounded-xl border border-slate-200/90 bg-slate-50/80 p-3 space-y-2 text-[11px] transition">
+                  <div
+                    onClick={() => setShowGuide((prev) => !prev)}
+                    className="flex items-center justify-between cursor-pointer select-none text-slate-700 hover:text-slate-900 transition"
+                  >
+                    <div className="flex items-center gap-1.5 font-semibold text-slate-800">
+                      <HelpCircle className="w-3.5 h-3.5 text-blue-600" />
+                      <span>{t('downloadModal.customDirGuideTitle', '想要自由选择保存位置？')}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="text-[11px] text-blue-600 hover:text-blue-700 flex items-center gap-0.5 font-medium"
+                    >
+                      <span>
+                        {showGuide
+                          ? t('downloadModal.guideCollapse', '收起指引')
+                          : t('downloadModal.guideExpand', '查看如何自选保存目录')}
+                      </span>
+                      {showGuide ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    </button>
+                  </div>
+
+                  <p className="text-slate-500 leading-relaxed">
+                    {t(
+                      'downloadModal.customDirGuideDesc',
+                      '受浏览器安全机制限制，在局域网（HTTP）环境下网页无法直接访问本地磁盘。若需每次自选保存位置，可在浏览器中开启设置：'
+                    )}
+                  </p>
+
+                  {showGuide && (
+                    <div className="pt-1.5 border-t border-slate-200/70 space-y-1.5 text-slate-600 animate-fade-in">
+                      <div className="p-2 bg-white rounded-lg border border-slate-200/60 space-y-1 font-mono text-[10.5px]">
+                        <div className="text-slate-700">
+                          📌 {t('downloadModal.guideChromeEdge', 'Chrome / Edge: 设置 → 下载内容 → 开启「下载前询问每个文件的保存位置」')}
+                        </div>
+                        <div className="text-slate-700">
+                          📌 {t('downloadModal.guideFirefox', 'Firefox: 设置 → 常规 → 下载 → 开启「每次都询问保存文件的位置」')}
+                        </div>
+                      </div>
+                      <p className="text-emerald-700 font-medium">
+                        ✨ {t(
+                          'downloadModal.guideResult',
+                          '开启后点击「确认下载」，系统将自动弹出「另存为」窗口让您自由选择任意磁盘或文件夹。'
+                        )}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
             ) : (
+              /* 支持 File System Access API 时的展示 (如 Localhost 或 HTTPS 环境) */
               <div className="space-y-2">
-                {/* 选项 1: 系统默认下载目录 (Mac 下载文件夹) */}
+                {/* 选项 1: 系统默认下载目录 */}
                 <div
                   onClick={handleSelectDefault}
                   className={`p-3 rounded-xl border cursor-pointer transition flex items-start gap-3 ${
@@ -298,7 +398,10 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                     <div className="flex items-center justify-between gap-1">
                       <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                         <HardDrive className="w-3.5 h-3.5 text-blue-600" />
-                        {t('downloadModal.destDefaultTitle', '系统默认下载目录 (Mac 下载文件夹)')}
+                        {t('downloadModal.destDefaultTitle', {
+                          osFolder,
+                          defaultValue: `系统默认下载目录 (${osFolder})`,
+                        })}
                       </span>
                       {directoryInfo.type === 'browser_default' && (
                         <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.2 rounded-full bg-emerald-100 text-emerald-700 font-medium shrink-0">
@@ -308,95 +411,95 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                       )}
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-                      {t(
-                        'downloadModal.destDefaultDesc',
-                        '文件直接保存至 macOS「下载」文件夹，免授权、零安全限制、最稳定快速。'
-                      )}
+                      {t('downloadModal.destDefaultDesc', {
+                        osName,
+                        defaultValue: `文件直接保存至 ${osName}「下载」文件夹，免授权、零安全限制、最稳定快速。`,
+                      })}
                     </p>
                   </div>
                 </div>
 
-                {/* 选项 2: 自定义本机独立目录 (需要支持并允许授权) */}
-                {isSupported && (
-                  <div
-                    onClick={handleSelectCustom}
-                    className={`p-3 rounded-xl border cursor-pointer transition flex items-start gap-3 ${
-                      selectedType === 'custom_directory'
-                        ? 'bg-blue-50/70 border-blue-400 ring-2 ring-blue-100 shadow-2xs'
-                        : 'bg-slate-50/60 border-slate-200/80 hover:bg-slate-100/60'
-                    }`}
-                  >
-                    <div className="pt-0.5">
-                      <div
-                        className={`w-4 h-4 rounded-full border flex items-center justify-center transition ${
-                          selectedType === 'custom_directory'
-                            ? 'border-blue-600 bg-blue-600'
-                            : 'border-slate-300 bg-white'
-                        }`}
-                      >
-                        {selectedType === 'custom_directory' && (
-                          <div className="w-1.5 h-1.5 rounded-full bg-white" />
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                          <FolderOpen className="w-3.5 h-3.5 text-blue-600" />
-                          {t('downloadModal.destCustomTitle', '自定义本机独立目录')}
-                        </span>
-                        {directoryInfo.type === 'custom_directory' && directoryInfo.dirName && (
-                          <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.2 rounded-full bg-emerald-100 text-emerald-700 font-medium shrink-0">
-                            <CheckCircle2 className="w-2.5 h-2.5" />
-                            {t('downloadModal.savedDirBadge', '上次使用的设置')}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-between gap-2 mt-1.5">
-                        <p className="text-[11px] text-slate-600 truncate font-mono min-w-0">
-                          {directoryInfo.dirName ? (
-                            <span className="font-semibold text-blue-900 bg-blue-100/70 px-1.5 py-0.5 rounded">
-                              📁 {directoryInfo.dirName}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 font-sans">
-                              {t('downloadModal.noDirChosen', '尚未指定专属文件夹 (需新建或选择子文件夹)')}
-                            </span>
-                          )}
-                        </p>
-
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleChangeCustomDirectory();
-                          }}
-                          disabled={downloading}
-                          className="shrink-0 px-2.5 py-1 text-[11px] font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-100/70 bg-white border border-blue-200 rounded-lg shadow-2xs transition active:scale-95 disabled:opacity-40"
-                        >
-                          {directoryInfo.dirName
-                            ? t('downloadModal.changeDir', '更改目录')
-                            : t('downloadModal.selectDir', '选择目录')}
-                        </button>
-                      </div>
+                {/* 选项 2: 自定义本机独立目录 */}
+                <div
+                  onClick={handleSelectCustom}
+                  className={`p-3 rounded-xl border cursor-pointer transition flex items-start gap-3 ${
+                    selectedType === 'custom_directory'
+                      ? 'bg-blue-50/70 border-blue-400 ring-2 ring-blue-100 shadow-2xs'
+                      : 'bg-slate-50/60 border-slate-200/80 hover:bg-slate-100/60'
+                  }`}
+                >
+                  <div className="pt-0.5">
+                    <div
+                      className={`w-4 h-4 rounded-full border flex items-center justify-center transition ${
+                        selectedType === 'custom_directory'
+                          ? 'border-blue-600 bg-blue-600'
+                          : 'border-slate-300 bg-white'
+                      }`}
+                    >
+                      {selectedType === 'custom_directory' && (
+                        <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                      )}
                     </div>
                   </div>
-                )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <FolderOpen className="w-3.5 h-3.5 text-blue-600" />
+                        {t('downloadModal.destCustomTitle', '自定义本机独立目录')}
+                      </span>
+                      {directoryInfo.type === 'custom_directory' && directoryInfo.dirName && (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.2 rounded-full bg-emerald-100 text-emerald-700 font-medium shrink-0">
+                          <CheckCircle2 className="w-2.5 h-2.5" />
+                          {t('downloadModal.savedDirBadge', '上次使用的设置')}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 mt-1.5">
+                      <p className="text-[11px] text-slate-600 truncate font-mono min-w-0">
+                        {directoryInfo.dirName ? (
+                          <span className="font-semibold text-blue-900 bg-blue-100/70 px-1.5 py-0.5 rounded">
+                            📁 {directoryInfo.dirName}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-sans">
+                            {t('downloadModal.noDirChosen', '尚未指定专属文件夹 (需新建或选择子文件夹)')}
+                          </span>
+                        )}
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleChangeCustomDirectory();
+                        }}
+                        disabled={downloading}
+                        className="shrink-0 px-2.5 py-1 text-[11px] font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-100/70 bg-white border border-blue-200 rounded-lg shadow-2xs transition active:scale-95 disabled:opacity-40"
+                      >
+                        {directoryInfo.dirName
+                          ? t('downloadModal.changeDir', '更改目录')
+                          : t('downloadModal.selectDir', '选择目录')}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
 
-          {/* 温馨提示卡片：解释 macOS / Chromium 的沙箱安全限制 */}
-          <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-xl text-[11px] text-amber-900 flex items-start gap-2.5 leading-relaxed">
-            <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-            <span>
-              {t(
-                'downloadModal.macSystemFilesTip',
-                '提示：受 macOS 与 Chromium 安全策略限制，系统禁止直接授权根「下载」或「桌面」目录（会提示含有系统文件）。如需在下载目录中保存，请在其中【新建子文件夹】（如命名为 LightDrop）再选取；或者直接选择【系统默认下载目录】。'
-              )}
-            </span>
-          </div>
+          {/* 仅在支持 API 且环境为 macOS 时，展示 macOS 系统的沙箱安全限制提示 */}
+          {isSupported && isMac && (
+            <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-xl text-[11px] text-amber-900 flex items-start gap-2.5 leading-relaxed">
+              <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>
+                {t(
+                  'downloadModal.macSystemFilesTip',
+                  '提示：受 macOS 与 Chromium 安全策略限制，系统禁止直接授权根「下载」或「桌面」目录（会提示含有系统文件）。如需在下载目录中保存，请在其中【新建子文件夹】再选取；或者直接选择【系统默认下载目录】。'
+                )}
+              </span>
+            </div>
+          )}
 
           {/* 当用户触发“含系统文件”限制时的智能挽救区 */}
           {showBlockedNotice && (
@@ -406,7 +509,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
                 <span>
                   {t(
                     'downloadModal.systemFolderBlockedNotice',
-                    '检测到受限系统目录。建议在「下载」中【新建子文件夹】选取，或直接切换为系统默认下载。'
+                    '检测到受限系统目录。建议新建子文件夹后再选取，或直接切换为系统默认下载。'
                   )}
                 </span>
               </div>

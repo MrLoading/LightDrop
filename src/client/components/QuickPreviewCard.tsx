@@ -17,9 +17,10 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ShareItem, SystemStats } from '@shared/types';
-import { formatBytes, formatDisplayTime, getFileTypeLabel } from '../utils/format';
+import { formatBytes, formatDisplayTime, getFileTypeLabel, isImageItem } from '../utils/format';
 import { PasswordModal } from './PasswordModal';
 import { TextMarkdownModal } from './TextMarkdownModal';
+import { ImageViewerModal } from './ImageViewerModal';
 import { getCharacterInfo, getDisplayNickname } from '../utils/nickname';
 
 export interface QuickPreviewCardProps {
@@ -42,12 +43,13 @@ export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
   const { t, i18n } = useTranslation();
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [markdownModalItem, setMarkdownModalItem] = useState<ShareItem | null>(null);
+  const [imageViewerItem, setImageViewerItem] = useState<{ item: ShareItem; password?: string } | null>(null);
 
   // 密码校验弹窗状态
   const [pwdModalState, setPwdModalState] = useState<{
     isOpen: boolean;
     item: ShareItem | null;
-    actionType: 'copy' | 'download' | 'view_markdown';
+    actionType: 'copy' | 'download' | 'view_markdown' | 'view_image';
   }>({
     isOpen: false,
     item: null,
@@ -144,6 +146,19 @@ export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
     setMarkdownModalItem(item);
   };
 
+  // 点击全屏查看图片
+  const handleViewImageClick = (item: ShareItem) => {
+    if (item.hasPassword && !item.password) {
+      setPwdModalState({
+        isOpen: true,
+        item,
+        actionType: 'view_image',
+      });
+      return;
+    }
+    setImageViewerItem({ item, password: item.password });
+  };
+
   // 密码弹窗确认
   const handlePasswordConfirm = async (password: string) => {
     const item = pwdModalState.item;
@@ -165,6 +180,12 @@ export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
       setMarkdownModalItem({
         ...item,
         content: decrypted,
+      });
+    } else if (pwdModalState.actionType === 'view_image') {
+      await verifyPassword(item.id, password);
+      setImageViewerItem({
+        item: { ...item, password },
+        password,
       });
     }
   };
@@ -218,7 +239,19 @@ export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-semibold text-slate-800 truncate" title={item.type === 'text' ? item.content || item.title : item.fileName || item.title}>
+                        <span
+                          onClick={() => {
+                            if (item.type === 'text') {
+                              handleViewClick(item);
+                            } else if (isImageItem(item)) {
+                              handleViewImageClick(item);
+                            } else {
+                              handleDownloadClick(item);
+                            }
+                          }}
+                          className="text-xs font-semibold text-slate-800 truncate cursor-pointer hover:text-blue-600"
+                          title={item.type === 'text' ? item.content || item.title : item.fileName || item.title}
+                        >
                           {item.type === 'text' ? getTextDisplayTitle(item) : item.fileName || item.title}
                         </span>
 
@@ -305,6 +338,29 @@ export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
                               <span className="text-[11px] hidden sm:inline">{t('preview.copy')}</span>
                             </>
                           )}
+                        </button>
+                      </div>
+                    ) : isImageItem(item) ? (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleViewImageClick(item)}
+                          className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 shadow-sm transition active:scale-95 flex items-center gap-1 text-xs font-medium"
+                          title={t('preview.viewFullscreen', '全屏查看')}
+                        >
+                          {item.hasPassword && !item.password ? (
+                            <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          ) : (
+                            <Eye className="w-3.5 h-3.5 shrink-0" />
+                          )}
+                          <span className="text-[11px] hidden sm:inline">{t('preview.view', '查看')}</span>
+                        </button>
+                        <button
+                          onClick={() => handleDownloadClick(item)}
+                          className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 shadow-sm transition active:scale-95 flex items-center gap-1 text-xs font-medium"
+                          title={t('preview.download')}
+                        >
+                          <Download className="w-3.5 h-3.5 shrink-0" />
+                          <span className="text-[11px] hidden sm:inline">{t('preview.download')}</span>
                         </button>
                       </div>
                     ) : (
@@ -395,6 +451,18 @@ export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
           item={markdownModalItem}
           isOpen={Boolean(markdownModalItem)}
           onClose={() => setMarkdownModalItem(null)}
+        />
+      )}
+
+      {/* 图片全屏查看大弹窗 */}
+      {imageViewerItem && (
+        <ImageViewerModal
+          isOpen={Boolean(imageViewerItem)}
+          onClose={() => setImageViewerItem(null)}
+          item={imageViewerItem.item}
+          allImageItems={recentRecords.filter(isImageItem)}
+          password={imageViewerItem.password}
+          onDownload={onDownloadFile}
         />
       )}
     </div>

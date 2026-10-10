@@ -6,7 +6,7 @@ interface PasswordModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
-  actionType: 'copy' | 'download' | 'preview' | 'view_markdown';
+  actionType: 'copy' | 'download' | 'preview' | 'view_markdown' | 'view_image';
   onConfirm: (password: string) => Promise<boolean | void>;
 }
 
@@ -67,6 +67,8 @@ export const PasswordModal: React.FC<PasswordModalProps> = ({
       ? t('passwordModal.actionDownload')
       : actionType === 'view_markdown'
       ? t('passwordModal.actionViewMarkdown')
+      : actionType === 'view_image'
+      ? t('passwordModal.actionViewImage')
       : t('passwordModal.actionUnlock');
 
   return (

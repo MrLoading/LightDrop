@@ -106,3 +106,23 @@ export function getFileTypeLabel(fileName: string = '', extension: string = '', 
   }
   return ext && ext.length <= 6 ? i18n.t('format.customFile', { ext: ext.toUpperCase() }) : i18n.t('format.unknownFile');
 }
+
+/**
+ * 判断是否为图片类型项目 (基于类型、扩展名或 MIME)
+ */
+export function isImageItem(
+  item?: { type?: string; fileName?: string; title?: string; extension?: string; mimeType?: string } | null
+): boolean {
+  if (!item) return false;
+  if (item.type === 'image') return true;
+  const name = item.fileName || item.title || '';
+  const ext = (item.extension || (name.includes('.') ? name.split('.').pop() : '') || '').toLowerCase();
+  const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif', 'tiff', 'tif', 'heic', 'heif'];
+  if (imageExts.includes(ext)) {
+    return true;
+  }
+  if (item.mimeType && item.mimeType.toLowerCase().startsWith('image/')) {
+    return true;
+  }
+  return false;
+}
