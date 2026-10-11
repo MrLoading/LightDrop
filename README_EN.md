@@ -112,31 +112,37 @@ Transferring files and text snippets between diverse devices on a local network 
 
 ## 🚀 Quick Start
 
+
 ### Method 1: Docker Compose (Recommended)
 
-1. Create a `docker-compose.yml`:
-```yaml
-version: '3.8'
+**Requirements**: Docker and Docker Compose.
 
-services:
-  lightdrop:
-    image: node:22-alpine
-    container_name: lightdrop
-    restart: unless-stopped
-    working_dir: /app
-    volumes:
-      - ./:/app
-      - ./data:/app/data
-    ports:
-      - "8080:8080"
-    command: sh -c "npm install -g pnpm && pnpm install && pnpm build && pnpm start"
+1. Clone the repository:
+
+```bash
+git clone https://github.com/zhatiai/LightDrop.git
+cd LightDrop
 ```
 
 2. Start the service:
+
 ```bash
 docker compose up -d
 ```
-Visit `http://<YOUR_LAN_IP>:8080` in your browser.
+
+Docker Compose automatically builds the application using the included `Dockerfile` and starts the service. No manual installation of Node.js or pnpm is required.
+
+Open `http://<YOUR_LAN_IP>:8080` in your browser.
+
+Uploaded files and application data are persisted in the `./data` directory.
+
+To update the application:
+
+```bash
+git pull
+docker compose up -d --build
+```
+
 
 ---
 

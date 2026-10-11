@@ -114,29 +114,34 @@
 
 ### 方式一：Docker Compose（推荐）
 
-1. 创建 `docker-compose.yml`：
-```yaml
-version: '3.8'
+**环境要求**：已安装 Docker 和 Docker Compose。
 
-services:
-  lightdrop:
-    image: node:22-alpine
-    container_name: lightdrop
-    restart: unless-stopped
-    working_dir: /app
-    volumes:
-      - ./:/app
-      - ./data:/app/data
-    ports:
-      - "8080:8080"
-    command: sh -c "npm install -g pnpm && pnpm install && pnpm build && pnpm start"
+1. 克隆仓库并进入项目目录：
+
+```bash
+git clone https://github.com/zhatiai/LightDrop.git
+cd LightDrop
 ```
 
 2. 启动服务：
+
 ```bash
 docker compose up -d
 ```
+
+Docker Compose 将自动使用项目自带的 `Dockerfile` 构建镜像并启动服务，无需手动安装 Node.js 或 pnpm。
+
 打开浏览器访问 `http://<本机局域网IP>:8080` 即可开始使用。
+
+上传文件和记录数据将持久化保存在项目目录下的 `./data` 中。
+
+更新代码后，可执行以下命令重新构建并启动服务：
+
+```bash
+git pull
+docker compose up -d --build
+```
+
 
 ---
 
