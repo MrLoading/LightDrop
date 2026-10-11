@@ -44,6 +44,7 @@
 ---
 
 ## 💡 Why LightDrop?
+<img width="1177" height="870" alt="image" src="https://github.com/user-attachments/assets/79b4cab8-0450-41e9-bf11-8638a0c09faa" />
 
 Transferring files and text snippets between diverse devices on a local network has traditionally been frustrating:
 
