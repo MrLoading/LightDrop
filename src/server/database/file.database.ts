@@ -150,6 +150,7 @@ export class FileDatabase {
     let fileCount = 0;
     let folderCount = 0;
     let imageCount = 0;
+    let batchCount = 0;
 
     const todayStr = new Date().toISOString().slice(0, 10);
     let todaySentCount = 0;
@@ -160,6 +161,11 @@ export class FileDatabase {
       else if (item.type === 'image') imageCount++;
       else if (item.type === 'file') fileCount++;
       else if (item.type === 'folder') folderCount++;
+      else if (item.type === 'batch') {
+        batchCount++;
+        if (item.isImageBatch) imageCount++;
+        else fileCount++;
+      }
 
       if (item.createdAt.startsWith(todayStr)) {
         todaySentCount++;
@@ -174,6 +180,7 @@ export class FileDatabase {
       fileCount,
       folderCount,
       imageCount,
+      batchCount,
     };
   }
 }

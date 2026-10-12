@@ -61,6 +61,60 @@ export class StorageService {
   }
 
   /**
+   * 将多条记录打包为一个统一的 zip 流下载
+   */
+  public createMultiRecordsZipStream(
+    records: Array<{ id: string; title: string; type: string; fileName?: string; content?: string }>,
+    zipName: string,
+    res: any
+  ): void {
+    const archive = archiver('zip', {
+      zlib: { level: 6 },
+    });
+
+    res.attachment(zipName);
+
+    archive.on('error', (err) => {
+      console.error('[StorageService] Multi-records zip stream error:', err);
+      if (!res.headersSent) {
+        res.status(500).send({ error: 'Failed to compress archive' });
+      }
+    });
+
+    archive.pipe(res);
+
+    for (const item of records) {
+      if (item.type === 'text') {
+        const textContent = item.content || item.title || '';
+        const safeName = (item.title || 'Note').replace(/[\\/:*?"<>|]/g, '_').trim();
+        const mdName = safeName.toLowerCase().endsWith('.md') ? safeName : `${safeName}.md`;
+        archive.append(textContent, { name: mdName });
+      } else {
+        const itemDir = this.getRecordStoragePath(item.id);
+        if (fs.existsSync(itemDir)) {
+          if (item.type === 'folder' || item.type === 'batch') {
+            const folderName = (item.title || 'Collection').replace(/[\\/:*?"<>|]/g, '_').trim();
+            archive.directory(itemDir, folderName);
+          } else {
+            const fileName = item.fileName || item.title;
+            const filePath = path.join(itemDir, fileName);
+            if (fs.existsSync(filePath)) {
+              archive.file(filePath, { name: fileName });
+            } else {
+              const files = fs.readdirSync(itemDir);
+              if (files.length > 0) {
+                archive.file(path.join(itemDir, files[0]), { name: files[0] });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    archive.finalize();
+  }
+
+  /**
    * 迁移现有存储目录到新存储目录
    */
   public migrateStorage(oldDir: string, newDir: string): { success: boolean; message?: string } {

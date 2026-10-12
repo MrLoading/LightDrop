@@ -8,7 +8,7 @@ import { fileDatabase } from '../database/file.database.js';
 import { storageService } from '../services/storage.service.js';
 import { wsService } from '../websocket/ws.server.js';
 import { upload, checkFileSizeLimit } from '../middlewares/upload.middleware.js';
-import { ShareItem } from '../../shared/types.js';
+import { ShareItem, BatchFileItem } from '../../shared/types.js';
 import { auditService } from '../services/audit.service.js';
 
 export const recordsRouter: Router = Router();
@@ -243,34 +243,65 @@ recordsRouter.post(
     const pwdHash = hasPwd ? hashPassword(password) : undefined;
     const senderNickname = auditService.getClientNickname(req);
 
-    const createdItems: ShareItem[] = [];
-
-    for (const f of files) {
+    // 1. 如果单次上传多个文件，聚合为单个“批量文件合辑”条目，统一管理、呈现、查看与下载
+    if (files.length > 1) {
       const id = nanoid(10);
-      const originalName = fixFileName(f.originalname);
-      const ext = path.extname(originalName).replace('.', '').toLowerCase();
-      const mimeType = f.mimetype || mime.lookup(originalName) || 'application/octet-stream';
-
       const recordDir = storageService.getRecordStoragePath(id);
       fs.mkdirSync(recordDir, { recursive: true });
 
-      const safeTargetFilePath = path.join(recordDir, originalName);
-      fs.copyFileSync(f.path, safeTargetFilePath);
+      let totalBytes = 0;
+      const subFiles: BatchFileItem[] = [];
+      const usedFileNames = new Set<string>();
 
-      try {
-        fs.unlinkSync(f.path);
-      } catch (_) {}
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        let originalName = fixFileName(f.originalname);
+        // 防同名文件重命名
+        if (usedFileNames.has(originalName)) {
+          const parsed = path.parse(originalName);
+          originalName = `${parsed.name}_${i + 1}${parsed.ext}`;
+        }
+        usedFileNames.add(originalName);
 
+        const safeTargetFilePath = path.join(recordDir, originalName);
+        fs.copyFileSync(f.path, safeTargetFilePath);
+
+        try {
+          fs.unlinkSync(f.path);
+        } catch (_) {}
+
+        totalBytes += f.size;
+        const ext = path.extname(originalName).replace('.', '').toLowerCase();
+        const mimeType = (f.mimetype || mime.lookup(originalName) || 'application/octet-stream').toString();
+        const isImg = isImageFile(originalName, mimeType);
+
+        subFiles.push({
+          id: `${id}_${i}`,
+          name: originalName,
+          size: f.size,
+          mimeType,
+          isImage: isImg,
+          extension: ext,
+        });
+      }
+
+      const allImages = subFiles.every((sf) => sf.isImage);
+      const customTitle = req.body.title ? fixFileName(req.body.title).trim() : '';
+      const defaultTitle = allImages
+        ? `${subFiles[0].name} 等 ${subFiles.length} 张图片`
+        : `${subFiles[0].name} 等 ${subFiles.length} 个文件`;
+      const title = customTitle || defaultTitle;
       const now = new Date().toISOString();
-      const isImg = isImageFile(originalName, mimeType.toString());
+
       const newItem: ShareItem = {
         id,
-        type: isImg ? 'image' : 'file',
-        title: originalName,
-        fileName: originalName,
-        mimeType: mimeType.toString(),
-        extension: ext,
-        fileSize: f.size,
+        type: 'batch',
+        title,
+        fileName: title,
+        fileCount: subFiles.length,
+        fileSize: totalBytes,
+        files: subFiles,
+        isImageBatch: allImages,
         createdAt: now,
         updatedAt: now,
         permission: 'all_can_download',
@@ -283,24 +314,77 @@ recordsRouter.post(
       };
 
       fileDatabase.insert(newItem);
-      createdItems.push(newItem);
       auditService.log(
         req,
-        isImg ? 'upload_image' : 'upload_file',
-        isImg ? '上传图片' : '上传文件',
+        'upload_batch',
+        allImages ? '上传图片合辑' : '上传文件合辑',
         newItem.title,
         newItem.id
       );
       wsService.broadcast('ITEM_CREATED', sanitizeRecord(newItem));
+      wsService.broadcast('STATS_UPDATED', fileDatabase.getStats());
+      wsService.broadcast('AUDIT_LOGS_UPDATED', {});
+
+      res.json({
+        success: true,
+        data: sanitizeRecord(newItem),
+      });
+      return;
     }
 
+    // 2. 如果上传单个文件，保持原有轻量单文件/单图片记录结构
+    const f = files[0];
+    const id = nanoid(10);
+    const originalName = fixFileName(f.originalname);
+    const ext = path.extname(originalName).replace('.', '').toLowerCase();
+    const mimeType = f.mimetype || mime.lookup(originalName) || 'application/octet-stream';
+
+    const recordDir = storageService.getRecordStoragePath(id);
+    fs.mkdirSync(recordDir, { recursive: true });
+
+    const safeTargetFilePath = path.join(recordDir, originalName);
+    fs.copyFileSync(f.path, safeTargetFilePath);
+
+    try {
+      fs.unlinkSync(f.path);
+    } catch (_) {}
+
+    const now = new Date().toISOString();
+    const isImg = isImageFile(originalName, mimeType.toString());
+    const newItem: ShareItem = {
+      id,
+      type: isImg ? 'image' : 'file',
+      title: originalName,
+      fileName: originalName,
+      mimeType: mimeType.toString(),
+      extension: ext,
+      fileSize: f.size,
+      createdAt: now,
+      updatedAt: now,
+      permission: 'all_can_download',
+      downloadCount: 0,
+      hasPassword: hasPwd,
+      password: hasPwd ? password.trim() : undefined,
+      passwordHash: pwdHash,
+      senderName: senderNickname,
+      nickname: senderNickname,
+    };
+
+    fileDatabase.insert(newItem);
+    auditService.log(
+      req,
+      isImg ? 'upload_image' : 'upload_file',
+      isImg ? '上传图片' : '上传文件',
+      newItem.title,
+      newItem.id
+    );
+    wsService.broadcast('ITEM_CREATED', sanitizeRecord(newItem));
     wsService.broadcast('STATS_UPDATED', fileDatabase.getStats());
     wsService.broadcast('AUDIT_LOGS_UPDATED', {});
 
-    const sanitizedResult = createdItems.map((item) => sanitizeRecord(item));
     res.json({
       success: true,
-      data: sanitizedResult.length === 1 ? sanitizedResult[0] : sanitizedResult,
+      data: sanitizeRecord(newItem),
     });
   }
 );
@@ -425,7 +509,13 @@ recordsRouter.get('/:id/download', (req: Request, res: Response) => {
   auditService.log(
     req,
     'download_file',
-    item.type === 'folder' ? '打包下载文件夹' : item.type === 'image' ? '下载图片' : '下载文件',
+    item.type === 'folder'
+      ? '打包下载文件夹'
+      : item.type === 'batch'
+      ? '打包下载文件合辑'
+      : item.type === 'image'
+      ? '下载图片'
+      : '下载文件',
     item.title || item.fileName || '未知文件',
     item.id
   );
@@ -456,7 +546,28 @@ recordsRouter.get('/:id/download', (req: Request, res: Response) => {
     return;
   }
 
-  if (item.type === 'folder') {
+  // 针对 batch 或 folder：支持通过 ?file=filename 单独下载或在线预览子文件
+  const targetSubFileName = ((req.query.file as string) || '').trim();
+  if (targetSubFileName) {
+    const subFilePath = path.join(recordDir, targetSubFileName);
+    // 严格防止 ../ 路径穿越安全漏洞
+    if (path.resolve(subFilePath).startsWith(path.resolve(recordDir)) && fs.existsSync(subFilePath)) {
+      const isInline = req.query.inline === 'true' || req.query.preview === 'true';
+      const encodedName = encodeURIComponent(targetSubFileName);
+      const mimeType = mime.lookup(targetSubFileName) || 'application/octet-stream';
+      res.setHeader('Content-Type', mimeType.toString());
+      if (isInline) {
+        res.setHeader('Content-Disposition', `inline; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
+      } else {
+        res.setHeader('Content-Disposition', `attachment; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
+      }
+      res.sendFile(subFilePath);
+      return;
+    }
+  }
+
+  // 批量合辑或文件夹整包流式压缩下载
+  if (item.type === 'folder' || item.type === 'batch') {
     const zipName = encodeURIComponent(`${item.title}.zip`);
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${zipName}"; filename*=UTF-8''${zipName}`);
@@ -477,6 +588,51 @@ recordsRouter.get('/:id/download', (req: Request, res: Response) => {
       res.status(404).json({ success: false, error: '文件已丢失' });
     }
   }
+});
+
+/**
+ * 批量打包下载多个选中的记录为单一 ZIP
+ */
+recordsRouter.post('/batch-download', (req: Request, res: Response) => {
+  const { ids, password } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ success: false, error: '请指定要下载的记录' });
+    return;
+  }
+
+  const validItems: ShareItem[] = [];
+  for (const id of ids) {
+    const item = fileDatabase.getById(id);
+    if (!item) continue;
+    if (item.hasPassword) {
+      if (!password || hashPassword(password) !== item.passwordHash) {
+        res.status(403).json({
+          success: false,
+          error: `记录「${item.title}」受访问密码保护，请输入正确访问密码后下载`,
+        });
+        return;
+      }
+    }
+    validItems.push(item);
+  }
+
+  if (validItems.length === 0) {
+    res.status(404).json({ success: false, error: '未找到有效记录' });
+    return;
+  }
+
+  auditService.log(
+    req,
+    'batch_download',
+    '批量打包下载',
+    `批量打包下载了 ${validItems.length} 条记录`
+  );
+  wsService.broadcast('AUDIT_LOGS_UPDATED', {});
+
+  const now = new Date();
+  const timeStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+  const zipName = encodeURIComponent(`LightDrop_批量打包_${timeStr}.zip`);
+  storageService.createMultiRecordsZipStream(validItems, `LightDrop_批量打包_${timeStr}.zip`, res);
 });
 
 /**

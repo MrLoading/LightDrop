@@ -1,7 +1,19 @@
 /**
  * LightDrop 共享记录类型
  */
-export type ShareItemType = 'text' | 'file' | 'folder' | 'image';
+export type ShareItemType = 'text' | 'file' | 'folder' | 'image' | 'batch';
+
+/**
+ * 批量文件包中的子文件元数据
+ */
+export interface BatchFileItem {
+  id: string;
+  name: string;
+  size: number;
+  mimeType?: string;
+  isImage?: boolean;
+  extension?: string;
+}
 
 /**
  * 共享记录数据模型
@@ -9,18 +21,20 @@ export type ShareItemType = 'text' | 'file' | 'folder' | 'image';
 export interface ShareItem {
   id: string;
   type: ShareItemType;
-  title: string;          // 文本标题或文件名/文件夹名
+  title: string;          // 文本标题或文件名/文件夹名/合辑名称
   content?: string;       // 针对文本类型：完整文本内容
   preview?: string;       // 针对文本类型：前100字符摘要或链接预览
   isUrl?: boolean;        // 是否是 URL 链接
   
-  // 针对文件和文件夹
+  // 针对文件、文件夹与批量合辑
   fileName?: string;      // 原始文件名/文件夹名
   originalPath?: string;  // 内部存储文件路径
   mimeType?: string;      // MIME 类型
   fileSize: number;       // 文件字节数或文本字节数
-  fileCount?: number;     // 针对文件夹：包含的文件数量
+  fileCount?: number;     // 针对文件夹与批量合辑：包含的文件数量
   extension?: string;     // 文件扩展名 (如 pdf, png, zip, etc.)
+  files?: BatchFileItem[];// 针对批量合辑：包含的子文件列表
+  isImageBatch?: boolean; // 针对批量合辑：是否全为图片
   
   createdAt: string;      // ISO 字符串或时间戳
   updatedAt: string;
@@ -54,6 +68,7 @@ export interface SystemStats {
   fileCount: number;
   folderCount: number;
   imageCount: number;
+  batchCount?: number;
   onlineUsers: number;
   serverTime: string;
   uptimeSeconds: number;
@@ -111,11 +126,13 @@ export type AuditActionType =
   | 'upload_file'
   | 'upload_image'
   | 'upload_folder'
+  | 'upload_batch'
   | 'copy_text'
   | 'copy_share_link'
   | 'open_share_page'
   | 'verify_password'
   | 'download_file'
+  | 'batch_download'
   | 'delete_record'
   | 'batch_delete'
   | 'clear_records';

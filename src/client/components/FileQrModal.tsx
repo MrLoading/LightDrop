@@ -4,6 +4,7 @@ import {
   File,
   FolderArchive,
   FileText,
+  Image as ImageIcon,
   Copy,
   Check,
   X,
@@ -11,10 +12,11 @@ import {
   Download,
   Wifi,
   Lock,
+  Eye,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ShareItem } from '@shared/types';
-import { formatBytes } from '../utils/format';
+import { formatBytes, isImageItem } from '../utils/format';
 import { copyToClipboard } from '../utils/clipboard';
 
 interface FileQrModalProps {
@@ -22,6 +24,7 @@ interface FileQrModalProps {
   onClose: () => void;
   item: ShareItem | null;
   downloadUrl: string;
+  mode?: 'download' | 'view';
 }
 
 export const FileQrModal: React.FC<FileQrModalProps> = ({
@@ -29,6 +32,7 @@ export const FileQrModal: React.FC<FileQrModalProps> = ({
   onClose,
   item,
   downloadUrl,
+  mode = 'download',
 }) => {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
@@ -45,6 +49,17 @@ export const FileQrModal: React.FC<FileQrModalProps> = ({
 
   const isFolder = item.type === 'folder';
   const isText = item.type === 'text';
+  const isImage = isImageItem(item);
+  const isView = mode === 'view';
+
+  const getTitle = () => {
+    if (isView) {
+      if (isText) return t('fileQrModal.titleTextView', '文本专属查看二维码');
+      if (isImage) return t('fileQrModal.titleImageView', '图片专属查看二维码');
+      return t('fileQrModal.titleFileView', '文件专属查看二维码');
+    }
+    return isText ? t('fileQrModal.titleText', '文本专属直链二维码') : t('fileQrModal.titleFile', '文件专属下载二维码');
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
@@ -64,15 +79,24 @@ export const FileQrModal: React.FC<FileQrModalProps> = ({
             <FolderArchive className="w-6 h-6 text-amber-500" />
           ) : isText ? (
             <FileText className="w-6 h-6 text-sky-500" />
+          ) : isImage ? (
+            <ImageIcon className="w-6 h-6 text-emerald-500" />
           ) : (
             <File className="w-6 h-6 text-indigo-500" />
           )}
         </div>
 
         {/* 标题与文件名 */}
-        <h3 className="text-sm font-bold text-slate-800">
-          {isText ? t('fileQrModal.titleText') : t('fileQrModal.titleFile')}
-        </h3>
+        <div className="flex items-center gap-1.5 justify-center">
+          {isView ? (
+            <Eye className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+          ) : (
+            <Download className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+          )}
+          <h3 className="text-sm font-bold text-slate-800">
+            {getTitle()}
+          </h3>
+        </div>
         <p
           className="text-xs font-semibold text-slate-700 mt-1 max-w-[280px] truncate"
           title={item.title || item.fileName}
@@ -89,7 +113,7 @@ export const FileQrModal: React.FC<FileQrModalProps> = ({
           <QRCodeSVG value={downloadUrl} size={170} level="M" />
           <div className="mt-2 text-[11px] text-slate-400 flex items-center gap-1 font-mono">
             <Wifi className="w-3 h-3 text-sky-500" />
-            {t('fileQrModal.scanTip')}
+            {isView ? t('fileQrModal.scanTipView', '手机同一 Wi-Fi 下扫码直接查看详情与预览') : t('fileQrModal.scanTip')}
           </div>
         </div>
 

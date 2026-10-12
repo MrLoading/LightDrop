@@ -102,8 +102,13 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     (targetItem: ShareItem | null, pwd?: string): string => {
       if (!targetItem) return '';
       const origin = (currentAccessUrl || window.location.origin).replace(/\/+$/, '');
-      const baseUrl = `${origin}/api/records/${targetItem.id}/download`;
+      const parentId = (targetItem as any).batchParentId;
       const p = pwd || targetItem.password;
+      if (parentId) {
+        const baseUrl = `${origin}/api/records/${parentId}/download?file=${encodeURIComponent(targetItem.fileName || targetItem.title)}&inline=true`;
+        return p ? `${baseUrl}&password=${encodeURIComponent(p)}` : baseUrl;
+      }
+      const baseUrl = `${origin}/api/records/${targetItem.id}/download`;
       return p ? `${baseUrl}?password=${encodeURIComponent(p)}` : baseUrl;
     },
     [currentAccessUrl]
@@ -281,6 +286,20 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   // 下载图片
   const handleDownloadClick = () => {
     if (!currentItem) return;
+    if ((currentItem as any).batchParentId) {
+      const parentId = (currentItem as any).batchParentId;
+      const origin = (currentAccessUrl || window.location.origin).replace(/\/+$/, '');
+      const p = password || currentItem.password;
+      const baseUrl = `${origin}/api/records/${parentId}/download?file=${encodeURIComponent(currentItem.fileName || currentItem.title)}`;
+      const url = p ? `${baseUrl}&password=${encodeURIComponent(p)}` : baseUrl;
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = currentItem.fileName || currentItem.title || 'image';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
     if (onDownload) {
       onDownload(currentItem, password || currentItem.password);
     } else {

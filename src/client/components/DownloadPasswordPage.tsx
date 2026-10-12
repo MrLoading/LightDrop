@@ -19,25 +19,39 @@ import {
   Check,
   ShieldCheck,
   RefreshCw,
+  Maximize2,
+  Layers,
+  Images,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ShareItem } from '@shared/types';
-import { formatBytes, formatDisplayTime, getFileTypeLabel } from '../utils/format';
+import { formatBytes, formatDisplayTime, getFileTypeLabel, isImageItem } from '../utils/format';
 import { copyToClipboard } from '../utils/clipboard';
 import { TextReaderView } from './TextReaderView';
+import { ImageViewerModal } from './ImageViewerModal';
 import { DownloadModal } from './DownloadModal';
+import { BatchViewerModal } from './BatchViewerModal';
 import { getUserNickname, getCharacterInfo, getDisplayNickname } from '../utils/nickname';
 
 interface DownloadPasswordPageProps {
   recordId: string;
+  initialMode?: 'download' | 'view';
   onBack?: () => void;
 }
 
 export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
   recordId,
+  initialMode = 'download',
   onBack,
 }) => {
   const { t, i18n } = useTranslation();
+  const isViewMode =
+    initialMode === 'view' ||
+    (typeof window !== 'undefined' &&
+      (window.location.pathname.startsWith('/view/') ||
+        new URLSearchParams(window.location.search).get('mode') === 'view' ||
+        new URLSearchParams(window.location.search).has('view')));
+
   const [record, setRecord] = useState<ShareItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -49,6 +63,7 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
 
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [unlockedContent, setUnlockedContent] = useState<string>('');
+  const [showImageViewerModal, setShowImageViewerModal] = useState(true);
   const [downloadTriggered, setDownloadTriggered] = useState(false);
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
   const [downloadSuccessToast, setDownloadSuccessToast] = useState<string | null>(null);
@@ -140,6 +155,10 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
 
       if (record?.type === 'text') {
         setUnlockedContent(json.content || '');
+      } else if (record?.type === 'batch') {
+        // 解锁后进入 BatchViewerModal
+      } else if (isImageItem(record) && isViewMode) {
+        setShowImageViewerModal(true);
       } else {
         // 自动弹出下载目录确认与下载弹窗
         setDownloadModalOpen(true);
@@ -213,6 +232,20 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
         </div>
       );
     }
+    if (record.type === 'batch') {
+      if (record.isImageBatch) {
+        return (
+          <div className="w-14 h-14 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0 shadow-sm border border-purple-200/50">
+            <Images className="w-7 h-7" />
+          </div>
+        );
+      }
+      return (
+        <div className="w-14 h-14 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 shadow-sm border border-indigo-200/50">
+          <Layers className="w-7 h-7" />
+        </div>
+      );
+    }
 
     const ext = (record.extension || '').toLowerCase();
     if (['ts', 'js', 'py', 'java', 'html', 'json'].includes(ext)) {
@@ -260,6 +293,52 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
       </div>
     );
   }
+
+  // 场景 B: 图片类型且处于查看模式且已解锁 (或无需密码) -> 首先进入照片详情查看页面 (图二界面)
+  if (
+    record &&
+    isImageItem(record) &&
+    isViewMode &&
+    (!record.hasPassword || isUnlocked) &&
+    showImageViewerModal
+  ) {
+    return (
+      <ImageViewerModal
+        isOpen={showImageViewerModal}
+        onClose={() => setShowImageViewerModal(false)}
+        item={record}
+        allImageItems={[record]}
+        password={password}
+        onDownload={() => triggerFileDownload(password)}
+      />
+    );
+  }
+
+  // 场景 C: 合辑类型且已解锁 (或无需密码) -> 渲染统一的合辑查看大弹窗
+  if (record && record.type === 'batch' && (!record.hasPassword || isUnlocked)) {
+    return (
+      <BatchViewerModal
+        isOpen={true}
+        onClose={handleGoHome}
+        item={record}
+        password={password}
+        verifyPassword={async (_id: string, pwd: string) => {
+          const ok = await doVerifyPassword(pwd);
+          if (!ok) throw new Error('密码错误');
+          return pwd;
+        }}
+      />
+    );
+  }
+
+  const isImage = record ? isImageItem(record) : false;
+  const ext = record ? (record.extension || record.fileName?.split('.').pop() || '').toLowerCase() : '';
+  const isVideo = ['mp4', 'webm', 'ogg', 'mov', 'm4v', 'mkv'].includes(ext);
+  const isAudio = ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac'].includes(ext);
+  const canPreview = Boolean(record && (!record.hasPassword || isUnlocked));
+  const previewMediaUrl = record
+    ? `/api/records/${record.id}/download${password ? `?password=${encodeURIComponent(password)}` : ''}`
+    : '';
 
   return (
     <div className="min-h-screen bg-[#f0f4f9] flex flex-col justify-between p-4 sm:p-6 lg:p-8">
@@ -339,6 +418,43 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
               </div>
             </div>
 
+            {/* 图片缩略图预览 (已解锁或无密码) */}
+            {isImage && canPreview && (
+              <div
+                className="relative group cursor-pointer mb-4 rounded-2xl overflow-hidden border border-slate-200/80 shadow-2xs bg-slate-900/5 max-h-72 flex items-center justify-center transition hover:border-blue-300"
+                onClick={() => setShowImageViewerModal(true)}
+                title={t('downloadPage.viewFullscreenImage', '全屏查看图片')}
+              >
+                <img
+                  src={previewMediaUrl}
+                  alt={record.fileName || record.title}
+                  className="max-h-72 object-contain rounded-xl"
+                />
+                <div className="absolute inset-0 bg-slate-900/35 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold gap-1.5 backdrop-blur-[1px]">
+                  <Maximize2 className="w-4 h-4" />
+                  <span>{t('downloadPage.viewFullscreenImage', '全屏查看图片')}</span>
+                </div>
+              </div>
+            )}
+
+            {/* 视频内嵌播放 */}
+            {isVideo && canPreview && (
+              <video
+                controls
+                className="w-full max-h-64 rounded-2xl bg-black mb-4 shadow-2xs"
+                src={previewMediaUrl}
+              />
+            )}
+
+            {/* 音频内嵌播放 */}
+            {isAudio && canPreview && (
+              <audio
+                controls
+                className="w-full mb-4"
+                src={previewMediaUrl}
+              />
+            )}
+
             {/* 文件基本信息汇总 */}
             <div className="bg-slate-50/80 rounded-2xl p-3.5 border border-slate-200/70 mb-5 text-xs text-slate-600 space-y-1.5">
               <div className="flex items-center justify-between">
@@ -353,6 +469,8 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
                 <span className="font-medium text-slate-700">
                   {record.type === 'folder'
                     ? `文件夹 (${record.fileCount || 0} 个文件)`
+                    : record.type === 'batch'
+                    ? `${record.isImageBatch ? t('records.typeImageBatch', '图片合辑') : t('records.typeBatch', '文件合辑')} (${record.files?.length || 0} 个文件)`
                     : record.type === 'text'
                     ? '纯文本'
                     : getFileTypeLabel(record.fileName, record.extension)}
@@ -368,12 +486,21 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
               </div>
             </div>
 
-            {/* 场景 1: 无密码保护 - 直接下载 */}
+            {/* 场景 1: 无密码保护 - 直接下载或全屏查看 */}
             {!record.hasPassword && (
-              <div className="space-y-3">
+              <div className="space-y-2.5">
+                {isImage && (
+                  <button
+                    onClick={() => setShowImageViewerModal(true)}
+                    className="w-full py-2.5 rounded-2xl bg-indigo-50 hover:bg-indigo-100/90 text-indigo-700 font-semibold text-xs border border-indigo-200/80 shadow-2xs transition active:scale-98 flex items-center justify-center gap-2"
+                  >
+                    <Eye className="w-4 h-4" />
+                    <span>{t('downloadPage.viewFullscreenImage', '全屏查看图片')}</span>
+                  </button>
+                )}
                 <button
                   onClick={() => handleStartDownloadFlow()}
-                  className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-md shadow-blue-200 transition active:scale-98 flex items-center justify-center gap-2"
+                  className="w-full py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-md shadow-blue-200 transition active:scale-98 flex items-center justify-center gap-2"
                 >
                   <Download className="w-4 h-4" />
                   <span>{t('records.download', '立即下载文件')}</span>
@@ -381,9 +508,9 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
               </div>
             )}
 
-            {/* 场景 2: 有密码保护且已成功解锁 (文件/图片/文件夹) */}
+            {/* 场景 2: 有密码保护且已成功解锁 */}
             {record.hasPassword && isUnlocked && (
-              <div className="space-y-4">
+              <div className="space-y-3.5">
                 <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-800 text-xs flex items-center gap-2.5">
                   <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
                   <div>
@@ -396,13 +523,24 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
                   </div>
                 </div>
 
-                <button
-                  onClick={() => handleStartDownloadFlow(password)}
-                  className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-md shadow-blue-200 transition active:scale-98 flex items-center justify-center gap-2"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>{t('downloadPage.reDownload', '重新下载文件')}</span>
-                </button>
+                <div className="space-y-2.5">
+                  {isImage && (
+                    <button
+                      onClick={() => setShowImageViewerModal(true)}
+                      className="w-full py-2.5 rounded-2xl bg-indigo-50 hover:bg-indigo-100/90 text-indigo-700 font-semibold text-xs border border-indigo-200/80 shadow-2xs transition active:scale-98 flex items-center justify-center gap-2"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span>{t('downloadPage.viewFullscreenImage', '全屏查看图片')}</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleStartDownloadFlow(password)}
+                    className="w-full py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-md shadow-blue-200 transition active:scale-98 flex items-center justify-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>{t('downloadPage.reDownload', '重新下载文件')}</span>
+                  </button>
+                </div>
               </div>
             )}
 
@@ -413,6 +551,8 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
                   <label className="block text-xs font-semibold text-slate-700">
                     {record.type === 'text'
                       ? t('downloadPage.inputTextLabel', '请输入访问密码以解锁阅读')
+                      : isImage && isViewMode
+                      ? t('downloadPage.inputImageLabel', '请输入访问密码以查看图片')
                       : t('downloadPage.inputLabel', '请输入访问密码以提取文件')}
                   </label>
 
@@ -467,6 +607,11 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
                     <>
                       <Eye className="w-4 h-4" />
                       <span>{t('downloadPage.submitUnlockText', '验证密码并开始阅读')}</span>
+                    </>
+                  ) : isImage && isViewMode ? (
+                    <>
+                      <Eye className="w-4 h-4" />
+                      <span>{t('downloadPage.submitUnlockImage', '验证密码并查看图片')}</span>
                     </>
                   ) : (
                     <>

@@ -2,32 +2,53 @@ import React, { useState, useEffect } from 'react';
 import { App } from './App';
 import { DownloadPasswordPage } from './components/DownloadPasswordPage';
 
-function getDownloadRecordId(): string | null {
+export interface RouteInfo {
+  recordId: string;
+  mode: 'download' | 'view';
+}
+
+function getRouteInfo(): RouteInfo | null {
   if (typeof window === 'undefined') return null;
 
-  // 匹配 /download/:id 格式
   const pathname = window.location.pathname;
-  const match = pathname.match(/^\/download\/([a-zA-Z0-9_-]+)/);
-  if (match && match[1]) {
-    return match[1];
+
+  // 匹配 /view/:id 格式
+  const viewMatch = pathname.match(/^\/view\/([a-zA-Z0-9_-]+)/);
+  if (viewMatch && viewMatch[1]) {
+    return { recordId: viewMatch[1], mode: 'view' };
+  }
+
+  // 匹配 /download/:id 格式
+  const downloadMatch = pathname.match(/^\/download\/([a-zA-Z0-9_-]+)/);
+  if (downloadMatch && downloadMatch[1]) {
+    const params = new URLSearchParams(window.location.search);
+    const isView = params.get('mode') === 'view' || params.has('view');
+    return { recordId: downloadMatch[1], mode: isView ? 'view' : 'download' };
+  }
+
+  // 兼顾兼容 ?view=:id 查询参数
+  const params = new URLSearchParams(window.location.search);
+  const viewParam = params.get('view');
+  if (viewParam) {
+    return { recordId: viewParam, mode: 'view' };
   }
 
   // 兼顾兼容 ?download=:id 查询参数
-  const params = new URLSearchParams(window.location.search);
   const qId = params.get('download');
   if (qId) {
-    return qId;
+    const isView = params.get('mode') === 'view' || params.has('view');
+    return { recordId: qId, mode: isView ? 'view' : 'download' };
   }
 
   return null;
 }
 
 export const Root: React.FC = () => {
-  const [downloadRecordId, setDownloadRecordId] = useState<string | null>(() => getDownloadRecordId());
+  const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(() => getRouteInfo());
 
   useEffect(() => {
     const handlePopState = () => {
-      setDownloadRecordId(getDownloadRecordId());
+      setRouteInfo(getRouteInfo());
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -36,13 +57,14 @@ export const Root: React.FC = () => {
     };
   }, []);
 
-  if (downloadRecordId) {
+  if (routeInfo) {
     return (
       <DownloadPasswordPage
-        recordId={downloadRecordId}
+        recordId={routeInfo.recordId}
+        initialMode={routeInfo.mode}
         onBack={() => {
           window.history.pushState({}, '', '/');
-          setDownloadRecordId(null);
+          setRouteInfo(null);
         }}
       />
     );

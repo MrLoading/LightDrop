@@ -376,18 +376,25 @@ export function useRecords() {
 
   // 过滤后的记录
   const filteredRecords = records.filter((item) => {
-    if (activeTab !== 'all' && item.type !== activeTab) {
-      return false;
+    if (activeTab !== 'all') {
+      if (activeTab === 'image' && item.type === 'batch' && item.isImageBatch) {
+        // 图片合辑在图片标签页下也展示
+      } else if (activeTab === 'file' && item.type === 'batch') {
+        // 文件合辑在文件标签页下展示
+      } else if (item.type !== activeTab) {
+        return false;
+      }
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       const matchTitle = item.title.toLowerCase().includes(q);
       const matchContent = item.content ? item.content.toLowerCase().includes(q) : false;
       const matchFile = item.fileName ? item.fileName.toLowerCase().includes(q) : false;
+      const matchSubFiles = item.files ? item.files.some((f) => f.name.toLowerCase().includes(q)) : false;
       const matchSender =
         (item.senderName && item.senderName.toLowerCase().includes(q)) ||
         (item.nickname && item.nickname.toLowerCase().includes(q));
-      return matchTitle || matchContent || matchFile || Boolean(matchSender);
+      return matchTitle || matchContent || matchFile || matchSubFiles || Boolean(matchSender);
     }
     return true;
   });

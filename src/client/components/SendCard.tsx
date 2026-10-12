@@ -15,11 +15,32 @@ import {
   X,
   Loader2,
   ClipboardPaste,
+  Paperclip,
+  Trash2,
+  Folder,
+  File as FileIcon,
+  FileText,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { extractDroppedItems, ProcessedFolder } from '../utils/dragDrop';
 import { UploadProgressInfo } from '../utils/uploader';
 import { formatBytes } from '../utils/format';
+
+export interface PendingUploadFile {
+  id: string;
+  file: File;
+  name: string;
+  size: number;
+  type: string;
+  isImage: boolean;
+  previewUrl?: string;
+}
+
+export interface PendingUploadFolder {
+  id: string;
+  folder: ProcessedFolder;
+}
 
 interface SendCardProps {
   onSendText: (content: string, title?: string, password?: string) => Promise<any>;
@@ -47,7 +68,6 @@ interface SendCardProps {
 export const SendCard: React.FC<SendCardProps> = ({
   onSendText,
   onUploadFiles,
-  onUploadFolder,
   onUploadMixedBatch,
 }) => {
   const { t } = useTranslation();
@@ -55,6 +75,10 @@ export const SendCard: React.FC<SendCardProps> = ({
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [passwordReadOnly, setPasswordReadOnly] = useState(true);
+
+  // 待上传文件与文件夹列表（复制/粘贴/选择/拖拽的文件在此暂存，点击上传后统一执行）
+  const [pendingFiles, setPendingFiles] = useState<PendingUploadFile[]>([]);
+  const [pendingFolders, setPendingFolders] = useState<PendingUploadFolder[]>([]);
 
   const [submitting, setSubmitting] = useState(false);
   const [submittingStatus, setSubmittingStatus] = useState<string>('');
@@ -68,6 +92,20 @@ export const SendCard: React.FC<SendCardProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
+
+  // 用于在组件卸载时及时回收所有创建的 Object URL，杜绝内存泄漏
+  const pendingFilesRef = useRef<PendingUploadFile[]>([]);
+  pendingFilesRef.current = pendingFiles;
+
+  useEffect(() => {
+    return () => {
+      pendingFilesRef.current.forEach((item) => {
+        if (item.previewUrl) {
+          URL.revokeObjectURL(item.previewUrl);
+        }
+      });
+    };
+  }, []);
 
   // 严格杜绝任何浏览器自动填充凭证注入：初次挂载与延时强制清空
   useEffect(() => {
@@ -93,7 +131,96 @@ export const SendCard: React.FC<SendCardProps> = ({
     setTimeout(() => setToastMsg(null), 4000);
   };
 
-  // 用户点击取消上传
+  // 添加文件到待上传列表 (支持图片生成预览图)
+  const addFilesToPending = (files: File[]) => {
+    const newItems: PendingUploadFile[] = files.map((file) => {
+      let name = file.name;
+      const isImg = file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test(name);
+      if (!name || name === 'image.png' || name === 'blob') {
+        const now = new Date();
+        const timeStr = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}_${Math.random().toString(36).slice(2, 5)}`;
+        const ext = file.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+        name = `${t('send.clipboardImagePrefix')}_${timeStr}.${ext}`;
+      }
+      const previewUrl = isImg ? URL.createObjectURL(file) : undefined;
+      return {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        file,
+        name,
+        size: file.size,
+        type: file.type,
+        isImage: isImg,
+        previewUrl,
+      };
+    });
+    setPendingFiles((prev) => [...prev, ...newItems]);
+  };
+
+  // 添加文件夹到待上传列表
+  const addFolderToPending = (folder: ProcessedFolder) => {
+    setPendingFolders((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        folder,
+      },
+    ]);
+  };
+
+  // 添加混合条目到待上传列表
+  const addMixedToPending = (files: File[], folders: ProcessedFolder[]) => {
+    if (files.length > 0) {
+      addFilesToPending(files);
+    }
+    if (folders.length > 0) {
+      folders.forEach((fld) => addFolderToPending(fld));
+    }
+  };
+
+  // 移除单个待上传文件
+  const handleRemovePendingFile = (id: string) => {
+    setPendingFiles((prev) => {
+      const target = prev.find((item) => item.id === id);
+      if (target?.previewUrl) {
+        URL.revokeObjectURL(target.previewUrl);
+      }
+      return prev.filter((item) => item.id !== id);
+    });
+  };
+
+  // 移除单个待上传文件夹
+  const handleRemovePendingFolder = (id: string) => {
+    setPendingFolders((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  // 清空全部待上传文件与文件夹
+  const handleClearAllPending = () => {
+    pendingFiles.forEach((item) => {
+      if (item.previewUrl) {
+        URL.revokeObjectURL(item.previewUrl);
+      }
+    });
+    setPendingFiles([]);
+    setPendingFolders([]);
+  };
+
+  // 获取文件展示对应图标
+  const getFileIcon = (name: string, isFolder?: boolean) => {
+    if (isFolder) return <Folder className="w-5 h-5 text-amber-500 shrink-0" />;
+    const ext = name.split('.').pop()?.toLowerCase() || '';
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif'].includes(ext)) {
+      return <ImageIcon className="w-5 h-5 text-purple-500 shrink-0" />;
+    }
+    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) {
+      return <Folder className="w-5 h-5 text-amber-500 shrink-0" />;
+    }
+    if (['txt', 'md', 'doc', 'docx', 'pdf', 'json', 'ts', 'js', 'html', 'css', 'csv'].includes(ext)) {
+      return <FileText className="w-5 h-5 text-blue-500 shrink-0" />;
+    }
+    return <FileIcon className="w-5 h-5 text-slate-500 shrink-0" />;
+  };
+
+  // 用户点击取消当前上传过程
   const handleCancelUpload = () => {
     if (abortRef.current) {
       abortRef.current();
@@ -105,105 +232,130 @@ export const SendCard: React.FC<SendCardProps> = ({
     showToast('error', t('send.toastCancelUpload'));
   };
 
+  // 计算待上传项总大小与总数量
+  const totalPendingSize =
+    pendingFiles.reduce((acc, f) => acc + f.file.size, 0) +
+    pendingFolders.reduce(
+      (acc, fld) => acc + fld.folder.files.reduce((fa, f) => fa + f.size, 0),
+      0
+    );
+
+  const totalPendingItemsCount = pendingFiles.length + pendingFolders.length;
+  const hasPending = totalPendingItemsCount > 0;
+  const hasText = Boolean(text.trim());
+
+  // 主发送 / 上传处理函数
   const handleSend = async () => {
-    if (!text.trim()) {
+    if (!hasText && !hasPending) {
       showToast('error', t('send.toastEmpty'));
       return;
     }
+
     const currentPwd = getEffectivePassword();
+
     try {
       setSubmitting(true);
-      setSubmittingStatus(t('send.processing'));
-      await onSendText(text, undefined, currentPwd);
-      setText('');
-      resetFormPassword();
-      showToast(
-        'success',
-        currentPwd ? t('send.toastSentProtected') : t('send.toastSent')
-      );
-    } catch (err: any) {
-      showToast('error', err?.message || 'Error');
-    } finally {
-      setSubmitting(false);
-      setSubmittingStatus('');
-    }
-  };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const currentPwd = getEffectivePassword();
-      try {
-        setSubmitting(true);
-        setSubmittingStatus(t('send.uploadingFilesCount', { count: e.target.files.length }));
+      // 1. 若存在待上传的文件或文件夹，执行上传
+      if (hasPending) {
         setUploadProgress({ percent: 0, loaded: 0, total: 0 });
+        setSubmittingStatus(t('send.uploadingFilesCount', { count: totalPendingItemsCount }));
 
-        await onUploadFiles(
-          e.target.files,
-          currentPwd,
-          (info) => setUploadProgress(info),
-          (abortFn) => {
-            abortRef.current = abortFn;
-          }
+        if (pendingFolders.length > 0) {
+          await onUploadMixedBatch(
+            pendingFiles.map((i) => i.file),
+            pendingFolders.map((i) => i.folder),
+            currentPwd,
+            (info) => setUploadProgress(info),
+            (abortFn) => {
+              abortRef.current = abortFn;
+            }
+          );
+        } else {
+          await onUploadFiles(
+            pendingFiles.map((i) => i.file),
+            currentPwd,
+            (info) => setUploadProgress(info),
+            (abortFn) => {
+              abortRef.current = abortFn;
+            }
+          );
+        }
+
+        // 文件上传成功后清理已上传项与释放预览内存
+        pendingFiles.forEach((f) => {
+          if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
+        });
+        setPendingFiles([]);
+        setPendingFolders([]);
+      }
+
+      // 2. 若同时输入了文字，执行发送文本记录
+      if (hasText) {
+        setSubmittingStatus(t('send.processing'));
+        await onSendText(text.trim(), undefined, currentPwd);
+        setText('');
+      }
+
+      resetFormPassword();
+
+      if (hasText && hasPending) {
+        showToast(
+          'success',
+          t('send.toastSendAndUploadSuccess', {
+            count: totalPendingItemsCount,
+            extra: currentPwd ? t('send.toastEncrypted') : '',
+          })
         );
-
-        resetFormPassword();
+      } else if (hasPending) {
         showToast(
           'success',
           t('send.toastUploadSuccess', {
-            count: e.target.files.length,
+            count: totalPendingItemsCount,
             extra: currentPwd ? t('send.toastEncrypted') : '',
           })
         );
-      } catch (err: any) {
-        if (err?.message !== t('send.toastCancelUpload')) {
-          showToast('error', err?.message || t('send.errUploadFailed'));
-        }
-      } finally {
-        setSubmitting(false);
-        setSubmittingStatus('');
-        setUploadProgress(null);
-        abortRef.current = null;
-        if (fileInputRef.current) fileInputRef.current.value = '';
+      } else {
+        showToast(
+          'success',
+          currentPwd ? t('send.toastSentProtected') : t('send.toastSent')
+        );
       }
+    } catch (err: any) {
+      if (err?.message !== t('send.toastCancelUpload')) {
+        showToast('error', err?.message || t('send.errUploadFailed'));
+      }
+    } finally {
+      setSubmitting(false);
+      setSubmittingStatus('');
+      setUploadProgress(null);
+      abortRef.current = null;
     }
   };
 
-  const handleFolderChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 选择常规文件 -> 添加到待上传列表
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const currentPwd = getEffectivePassword();
-      try {
-        setSubmitting(true);
-        setSubmittingStatus(t('send.processing'));
-        setUploadProgress({ percent: 0, loaded: 0, total: 0 });
+      const files = Array.from(e.target.files);
+      addFilesToPending(files);
+      showToast('success', t('send.toastAddedToPending', { count: files.length }));
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
-        await onUploadFolder(
-          e.target.files,
-          currentPwd,
-          (info) => setUploadProgress(info),
-          (abortFn) => {
-            abortRef.current = abortFn;
-          }
-        );
-
-        resetFormPassword();
-        showToast(
-          'success',
-          t('send.toastUploadFolderSuccess', {
-            count: e.target.files.length,
-            extra: currentPwd ? t('send.toastEncrypted') : '',
-          })
-        );
-      } catch (err: any) {
-        if (err?.message !== t('send.toastCancelUpload')) {
-          showToast('error', err?.message || t('send.errUploadFailed'));
-        }
-      } finally {
-        setSubmitting(false);
-        setSubmittingStatus('');
-        setUploadProgress(null);
-        abortRef.current = null;
-        if (folderInputRef.current) folderInputRef.current.value = '';
-      }
+  // 选择文件夹 -> 添加到待上传列表
+  const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
+      const folderName = files[0]?.webkitRelativePath?.split('/')[0] || t('send.defaultFolderName');
+      const paths = files.map((f) => f.webkitRelativePath || f.name);
+      addFolderToPending({
+        name: folderName,
+        files,
+        paths,
+      });
+      showToast('success', t('send.toastAddedFolderToPending', { name: folderName }));
+      if (folderInputRef.current) folderInputRef.current.value = '';
     }
   };
 
@@ -231,112 +383,6 @@ export const SendCard: React.FC<SendCardProps> = ({
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'copy';
-  };
-
-  // 统一上传混合项 (文件 + 文件夹，供拖拽和剪贴板复用)
-  const uploadMixedItems = async (
-    individualFiles: File[],
-    folders: ProcessedFolder[],
-    sourceName?: string
-  ) => {
-    const totalFilesCount = individualFiles.length;
-    const totalFoldersCount = folders.length;
-    const resolvedSource = sourceName || t('send.sourceClipboard');
-
-    if (totalFilesCount === 0 && totalFoldersCount === 0) {
-      showToast('error', t('send.errNoUploadable'));
-      return;
-    }
-
-    try {
-      setSubmitting(true);
-      setSubmittingStatus(
-        t('send.uploadingMixed', {
-          files: totalFilesCount > 0 ? t('send.filesCount', { count: totalFilesCount }) : '',
-          separator: totalFilesCount > 0 && totalFoldersCount > 0 ? t('send.andSeparator') : '',
-          folders: totalFoldersCount > 0 ? t('send.foldersCount', { count: totalFoldersCount }) : '',
-        })
-      );
-      setUploadProgress({ percent: 0, loaded: 0, total: 0 });
-
-      const currentPwd = getEffectivePassword();
-      const result = await onUploadMixedBatch(
-        individualFiles,
-        folders,
-        currentPwd,
-        (info) => setUploadProgress(info),
-        (abortFn) => {
-          abortRef.current = abortFn;
-        }
-      );
-      resetFormPassword();
-
-      const successParts: string[] = [];
-      if (result.uploadedFilesCount > 0) {
-        successParts.push(t('send.filesCount', { count: result.uploadedFilesCount }));
-      }
-      if (result.uploadedFoldersCount > 0) {
-        successParts.push(t('send.foldersCount', { count: result.uploadedFoldersCount }));
-      }
-
-      showToast(
-        'success',
-        t('send.toastUploadFromSourceSuccess', {
-          source: resolvedSource,
-          parts: successParts.join(t('send.commaSeparator')),
-          extra: currentPwd ? t('send.toastEncrypted') : '',
-        })
-      );
-    } catch (err: any) {
-      if (err?.message !== t('send.toastCancelUpload')) {
-        showToast('error', err?.message || t('send.errUploadFailed'));
-      }
-    } finally {
-      setSubmitting(false);
-      setSubmittingStatus('');
-      setUploadProgress(null);
-      abortRef.current = null;
-    }
-  };
-
-  // 统一上传纯文件列表 (供选择文件、剪贴板图片等复用)
-  const uploadFileList = async (files: File[], sourceName?: string) => {
-    if (files.length === 0) return;
-    const currentPwd = getEffectivePassword();
-    const resolvedSource = sourceName || t('send.sourceClipboard');
-    try {
-      setSubmitting(true);
-      setSubmittingStatus(t('send.uploadingFromSource', { source: resolvedSource, count: files.length }));
-      setUploadProgress({ percent: 0, loaded: 0, total: 0 });
-
-      await onUploadFiles(
-        files,
-        currentPwd,
-        (info) => setUploadProgress(info),
-        (abortFn) => {
-          abortRef.current = abortFn;
-        }
-      );
-
-      resetFormPassword();
-      showToast(
-        'success',
-        t('send.toastUploadFromSourceSuccess', {
-          source: resolvedSource,
-          parts: t('send.filesCount', { count: files.length }),
-          extra: currentPwd ? t('send.toastEncrypted') : '',
-        })
-      );
-    } catch (err: any) {
-      if (err?.message !== t('send.toastCancelUpload')) {
-        showToast('error', err?.message || t('send.errUploadFilesFailed'));
-      }
-    } finally {
-      setSubmitting(false);
-      setSubmittingStatus('');
-      setUploadProgress(null);
-      abortRef.current = null;
-    }
   };
 
   // 探测 File 对象是否真实为不可读的操作系统目录
@@ -422,7 +468,7 @@ export const SendCard: React.FC<SendCardProps> = ({
     return false;
   };
 
-  // 深度解析拖拽内容：文件、文件夹、混合项
+  // 深度解析拖拽内容：文件、文件夹、混合项 -> 添加至待上传列表
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -430,16 +476,14 @@ export const SendCard: React.FC<SendCardProps> = ({
     setDragActive(false);
 
     try {
-      setSubmitting(true);
-      setSubmittingStatus(t('send.parsingDrop'));
-      setUploadProgress({ percent: 0, loaded: 0, total: 0 });
-
       const { individualFiles, folders } = await extractDroppedItems(e.dataTransfer);
-      await uploadMixedItems(individualFiles, folders, t('send.sourceDrop'));
-    } catch (err: any) {
-      if (err?.message !== t('send.toastCancelUpload')) {
-        showToast('error', err?.message || t('send.errDropFailed'));
+      if (individualFiles.length > 0 || folders.length > 0) {
+        addMixedToPending(individualFiles, folders);
+        const totalCount = individualFiles.length + folders.length;
+        showToast('success', t('send.toastAddedMixedToPending', { count: totalCount }));
       }
+    } catch (err: any) {
+      showToast('error', err?.message || t('send.errDropFailed'));
     }
   };
 
@@ -450,7 +494,7 @@ export const SendCard: React.FC<SendCardProps> = ({
     const clipboardData = e.clipboardData;
     if (!clipboardData) return;
 
-    // 关键修复：同步检查剪贴板是否携带文件、图像或本地操作系统文件路径
+    // 同步检查剪贴板是否携带文件、图像或本地操作系统文件路径
     // 必须在任何 await 异步之前同步执行 e.preventDefault()，防止浏览器原生将文件名文本粘贴进 textarea
     const hasFiles = Boolean(
       (clipboardData.files && clipboardData.files.length > 0) ||
@@ -481,20 +525,21 @@ export const SendCard: React.FC<SendCardProps> = ({
       return;
     }
 
-    // 如果包含常规真实文件，立即执行上传流程
+    // 如果包含常规真实文件，加入待上传列表，不要直接触发上传！
     if (validFiles.length > 0) {
       e.preventDefault();
-      await uploadFileList(validFiles, t('send.sourceShortcutPaste'));
+      addFilesToPending(validFiles);
+      showToast('success', t('send.toastAddedToPending', { count: validFiles.length }));
       return;
     }
 
-    // 2. 尝试解析拖拽/剪贴板混合项 (可能包含支持的目录结构)
+    // 2. 尝试解析拖拽/剪贴板混合项
     try {
       const { individualFiles, folders } = await extractDroppedItems(clipboardData);
       if (individualFiles.length > 0 || folders.length > 0) {
         e.preventDefault();
-        // 立即执行上传流程！
-        await uploadMixedItems(individualFiles, folders, t('send.sourceShortcutPaste'));
+        addMixedToPending(individualFiles, folders);
+        showToast('success', t('send.toastAddedMixedToPending', { count: individualFiles.length + folders.length }));
         return;
       }
     } catch (err) {
@@ -503,10 +548,8 @@ export const SendCard: React.FC<SendCardProps> = ({
 
     // 3. 检查纯文本内容 (如果之前探测到是本地路径字符串但无二进制流)
     if (isFileText && pastedText) {
-      // 用户在操作系统复制了本地文件，但当前浏览器沙箱由于权限未提供文件二进制流，仅给出了文件名
       e.preventDefault();
       showToast('error', t('send.errClipboardLocalFile', { name: pastedText.trim() }));
-      // 贴心唤起系统文件选择框
       setTimeout(() => {
         fileInputRef.current?.click();
       }, 200);
@@ -516,7 +559,7 @@ export const SendCard: React.FC<SendCardProps> = ({
     // 4. 若为普通文字、代码或链接，允许浏览器默认将文字粘贴进 textarea
   };
 
-  // 主动点击【粘贴剪切板】按钮处理：读取并立即执行上传/发送流程
+  // 主动点击【粘贴剪切板】按钮处理：图片加入待上传列表，文字填入输入框
   const handlePasteFromClipboard = async () => {
     if (submitting) return;
 
@@ -548,8 +591,8 @@ export const SendCard: React.FC<SendCardProps> = ({
           }
 
           if (imageFiles.length > 0) {
-            // 立即执行上传流程！
-            await uploadFileList(imageFiles, t('send.sourceSystemClipboard'));
+            addFilesToPending(imageFiles);
+            showToast('success', t('send.toastAddedToPending', { count: imageFiles.length }));
             return;
           }
         } catch (readErr) {
@@ -561,7 +604,6 @@ export const SendCard: React.FC<SendCardProps> = ({
       const textContent = await navigator.clipboard.readText();
       const trimmedText = textContent ? textContent.trim() : '';
       if (trimmedText) {
-        // 检查是否为文件名/路径 (防止将文件名当成文本记录发出去)
         if (isLocalFileOrPathText(trimmedText)) {
           showToast('error', t('send.errClipboardLocalFile', { name: trimmedText }));
           setTimeout(() => {
@@ -570,22 +612,9 @@ export const SendCard: React.FC<SendCardProps> = ({
           return;
         }
 
-        // 普通文本：填入输入框并立即自动执行发送流程！
-        setText(trimmedText);
-        setSubmitting(true);
-        setSubmittingStatus(t('send.sendingClipboardText'));
-        const currentPwd = getEffectivePassword();
-        try {
-          await onSendText(trimmedText, undefined, currentPwd);
-          setText('');
-          resetFormPassword();
-          showToast('success', t('send.toastClipboardTextSuccess', { extra: currentPwd ? t('send.toastEncrypted') : '' }));
-        } catch (sendErr: any) {
-          showToast('error', sendErr?.message || t('send.errSendTextFailed'));
-        } finally {
-          setSubmitting(false);
-          setSubmittingStatus('');
-        }
+        // 普通文本：填入输入框（已有内容则追加换行）
+        setText((prev) => (prev ? `${prev}\n${trimmedText}` : trimmedText));
+        showToast('success', t('send.toastClipboardTextPasted'));
         return;
       }
 
@@ -595,12 +624,11 @@ export const SendCard: React.FC<SendCardProps> = ({
     }
   };
 
-  // 窗口全局快捷键粘贴监听 (未聚焦输入框时，在页面按 Cmd+V / Ctrl+V 也可直接上传文件)
+  // 窗口全局快捷键粘贴监听 (未聚焦输入框时，在页面按 Cmd+V / Ctrl+V 也添加至待上传列表)
   useEffect(() => {
     const handleGlobalPaste = async (e: ClipboardEvent) => {
       if (submitting) return;
       const activeEl = document.activeElement;
-      // 若当前用户正聚焦在其它文本输入框 (如搜索栏)，不作全局抢占
       if (
         activeEl &&
         activeEl !== document.body &&
@@ -623,14 +651,44 @@ export const SendCard: React.FC<SendCardProps> = ({
 
         if (validFiles.length > 0) {
           e.preventDefault();
-          uploadFileList(validFiles, t('send.sourceGlobalPaste'));
+          addFilesToPending(validFiles);
+          showToast('success', t('send.toastAddedToPending', { count: validFiles.length }));
         }
       }
     };
 
     window.addEventListener('paste', handleGlobalPaste);
     return () => window.removeEventListener('paste', handleGlobalPaste);
-  }, [submitting]);
+  }, [submitting, t]);
+
+  // 动态生成操作按钮文案
+  const getButtonText = () => {
+    if (submitting) {
+      return submittingStatus || t('send.processing');
+    }
+    if (hasText && hasPending) {
+      return pendingFolders.length > 0
+        ? t('send.sendAndUploadMixedBtn', { count: totalPendingItemsCount })
+        : t('send.sendAndUploadBtn', { count: totalPendingItemsCount });
+    }
+    if (hasPending) {
+      return pendingFolders.length > 0
+        ? t('send.uploadPendingMixedBtn', { count: totalPendingItemsCount })
+        : t('send.uploadPendingBtn', { count: totalPendingItemsCount });
+    }
+    return t('send.sendBtn');
+  };
+
+  // 动态生成操作按钮图标
+  const getButtonIcon = () => {
+    if (submitting) {
+      return <Loader2 className="w-4 h-4 animate-spin text-white" />;
+    }
+    if (hasPending && !hasText) {
+      return <UploadCloud className="w-4 h-4 text-white" />;
+    }
+    return <Send className="w-4 h-4 fill-white stroke-none" />;
+  };
 
   return (
     <div
@@ -664,7 +722,7 @@ export const SendCard: React.FC<SendCardProps> = ({
         </div>
       )}
 
-      {/* 实时上传进度面板 (拖拽或选择上传时展示，带取消按钮) */}
+      {/* 实时上传进度面板 (上传过程中展示，带取消按钮) */}
       {submitting && uploadProgress !== null && (
         <div className="mb-4 bg-blue-50/80 border border-blue-200/80 rounded-xl p-3.5 animate-fade-in">
           <div className="flex items-center justify-between mb-2">
@@ -755,9 +813,17 @@ export const SendCard: React.FC<SendCardProps> = ({
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+              e.preventDefault();
+              if (!submitting && (hasText || hasPending)) {
+                handleSend();
+              }
+            }
+          }}
           onPaste={handlePaste}
           placeholder={t('send.placeholder')}
-          rows={5}
+          rows={4}
           maxLength={10000}
           disabled={submitting}
           className="w-full text-xs sm:text-sm p-3.5 bg-slate-50/60 hover:bg-slate-50 focus:bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-slate-700 placeholder-slate-400 transition resize-none disabled:opacity-50"
@@ -766,6 +832,140 @@ export const SendCard: React.FC<SendCardProps> = ({
           {text.length} / 10000
         </div>
       </div>
+
+      {/* 待上传文件/图片列表 (复制或选择的文件在输入框下方清晰呈现，支持实时预览与移除) */}
+      {hasPending && (
+        <div className="mb-3.5 rounded-xl border border-blue-200/90 bg-blue-50/30 p-3 animate-fade-in shadow-2xs">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Paperclip className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+              <span className="text-xs font-bold text-slate-800">
+                {t('send.pendingListTitle')}
+              </span>
+              <span className="text-[11px] font-mono text-slate-500 bg-white/90 px-2 py-0.5 rounded-full border border-slate-200/80">
+                {pendingFolders.length > 0
+                  ? t('send.pendingMixedSummary', {
+                      filesCount: pendingFiles.length,
+                      foldersCount: pendingFolders.length,
+                      size: formatBytes(totalPendingSize),
+                    })
+                  : t('send.pendingFilesSummary', {
+                      count: pendingFiles.length,
+                      size: formatBytes(totalPendingSize),
+                    })}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={submitting}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-100/60 border border-transparent hover:border-blue-200 transition active:scale-95 disabled:opacity-50"
+                title={t('send.uploadFiles')}
+              >
+                <UploadCloud className="w-3 h-3" />
+                <span>+ {t('send.uploadFiles')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleClearAllPending}
+                disabled={submitting}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition active:scale-95 disabled:opacity-50"
+                title={t('send.clearPendingTitle')}
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>{t('send.clearPending')}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 列表项内容，支持多项时纵向平滑滚动 */}
+          <div className="space-y-1.5 max-h-56 overflow-y-auto pr-0.5">
+            {/* 待上传文件夹 */}
+            {pendingFolders.map((item) => {
+              const folderTotalSize = item.folder.files.reduce((acc, f) => acc + f.size, 0);
+              return (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between p-2 rounded-xl bg-white hover:bg-slate-50/90 border border-slate-200/80 transition group shadow-2xs"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-200/80 flex items-center justify-center shrink-0 text-amber-600">
+                      <Folder className="w-5 h-5 fill-amber-500/20 stroke-amber-600" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-semibold text-slate-800 truncate" title={item.folder.name}>
+                        {item.folder.name}
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
+                        <span>{t('send.filesCount', { count: item.folder.files.length })}</span>
+                        <span>•</span>
+                        <span>{formatBytes(folderTotalSize)}</span>
+                        <span>•</span>
+                        <span className="text-amber-600 font-sans font-medium">{t('send.folderBadge')}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemovePendingFolder(item.id)}
+                    disabled={submitting}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition shrink-0 ml-2 disabled:opacity-50"
+                    title={t('send.removePendingItem')}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              );
+            })}
+
+            {/* 待上传文件 (图片展示缩略图，普通文件展示扩展名图标) */}
+            {pendingFiles.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between p-2 rounded-xl bg-white hover:bg-slate-50/90 border border-slate-200/80 transition group shadow-2xs"
+              >
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  {item.isImage && item.previewUrl ? (
+                    <img
+                      src={item.previewUrl}
+                      alt={item.name}
+                      className="w-10 h-10 rounded-lg object-cover border border-slate-200/90 shrink-0 bg-slate-100 shadow-2xs"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-200/80 flex items-center justify-center shrink-0 text-blue-600">
+                      {getFileIcon(item.name)}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-semibold text-slate-800 truncate" title={item.name}>
+                      {item.name}
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
+                      <span>{formatBytes(item.size)}</span>
+                      {item.isImage && (
+                        <>
+                          <span>•</span>
+                          <span className="text-purple-600 font-sans font-medium">{t('send.imageBadge')}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRemovePendingFile(item.id)}
+                  disabled={submitting}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition shrink-0 ml-2 disabled:opacity-50"
+                  title={t('send.removePendingItem')}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 访问密码设置栏 (常驻显示，默认为空，输入即生效，带清空图标) */}
       <div
@@ -905,15 +1105,15 @@ export const SendCard: React.FC<SendCardProps> = ({
         </button>
       </div>
 
-      {/* 主发送按钮 */}
+      {/* 主操作按钮 (发送文本 / 上传文件 / 发送并上传) */}
       <button
         type="button"
         onClick={handleSend}
-        disabled={submitting || !text.trim()}
+        disabled={submitting || (!hasText && !hasPending)}
         className="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 active:scale-[0.99] text-white rounded-xl font-medium text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm shadow-blue-500/25 transition disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
       >
-        <Send className="w-4 h-4 fill-white stroke-none" />
-        {submitting ? submittingStatus || t('send.processing') : t('send.sendBtn')}
+        {getButtonIcon()}
+        <span>{getButtonText()}</span>
       </button>
     </div>
   );
