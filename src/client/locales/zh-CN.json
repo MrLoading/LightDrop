@@ -559,7 +559,16 @@
     "guideExpand": "查看如何自选保存目录",
     "macSystemFilesTip": "提示：受 macOS 与 Chromium 安全策略限制，系统禁止直接授权根「下载」或「桌面」目录（会提示含有系统文件）。如需在下载目录中保存，请在其中【新建子文件夹】再选取；或者直接选择【系统默认下载目录】。",
     "switchToDefaultBtn": "一键使用系统默认下载目录",
-    "systemFolderBlockedNotice": "检测到受限系统目录。建议新建子文件夹后再选取，或直接切换为系统默认下载。"
+    "systemFolderBlockedNotice": "检测到受限系统目录。建议新建子文件夹后再选取，或直接切换为系统默认下载。",
+    "completedTitle": "文件下载完成",
+    "completedSubtitle": "文件已成功保存至本地设备",
+    "completedFileName": "文件名称",
+    "completedFileSize": "下载文件大小",
+    "completedSaveDir": "下载目录地址",
+    "completedDefaultHintMac": "提示：可前往访达(Finder)中的「下载」文件夹或使用快捷键 ⌥⌘L 查看文件。",
+    "completedDefaultHintWin": "提示：可前往「此电脑」中的「下载」文件夹查看文件。",
+    "completedDefaultHintGeneric": "提示：可前往操作系统的「下载」文件夹或浏览器下载管理器查看。",
+    "btnConfirmComplete": "确认"
   },
   "batchViewer": {
     "textContent": "正文说明",

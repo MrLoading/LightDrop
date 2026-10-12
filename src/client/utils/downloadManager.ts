@@ -217,7 +217,7 @@ export async function saveFileToDirectoryHandle(
   fileName: string,
   downloadUrl: string,
   onProgress?: (percent: number, loaded: number, total: number) => void
-): Promise<void> {
+): Promise<{ fileName: string; size: number }> {
   const hasPermission = await verifyDirectoryPermission(dirHandle);
   if (!hasPermission) {
     throw new Error('未获得目标保存目录的写入权限');
@@ -244,9 +244,9 @@ export async function saveFileToDirectoryHandle(
   const fileHandle = await dirHandle.getFileHandle(finalFileName, { create: true });
   const writable = await (fileHandle as any).createWritable();
 
+  let loaded = 0;
   if (response.body) {
     const reader = response.body.getReader();
-    let loaded = 0;
 
     const progressStream = new ReadableStream({
       async start(controller) {
@@ -269,9 +269,12 @@ export async function saveFileToDirectoryHandle(
     await progressStream.pipeTo(writable);
   } else {
     const blob = await response.blob();
+    loaded = blob.size;
     await writable.write(blob);
     await writable.close();
   }
+
+  return { fileName: finalFileName, size: loaded || contentLength || 0 };
 }
 
 /**

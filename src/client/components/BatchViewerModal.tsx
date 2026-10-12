@@ -462,7 +462,7 @@ export const BatchViewerModal: React.FC<BatchViewerModalProps> = ({
                         <FileText className="w-4 h-4 text-blue-600 shrink-0" />
                         <span>{t('batchViewer.textContent', '正文说明')}</span>
                         <span className="text-[11px] font-normal text-slate-400 font-mono">
-                          ({displayContent.length} {t('markdownModal.chars', '字')})
+                          ({t('markdownModal.chars', { count: displayContent.length })})
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5">

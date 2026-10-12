@@ -559,7 +559,16 @@
     "guideExpand": "How to choose a custom save directory",
     "macSystemFilesTip": "Note: Due to macOS and Chromium security restrictions, selecting the root \"Downloads\" or \"Desktop\" folder directly is blocked by browser (\"contains system files\"). To save inside Downloads, create a new subfolder and select it; or simply use \"System Default\".",
     "switchToDefaultBtn": "Use System Default Downloads",
-    "systemFolderBlockedNotice": "Restricted system directory detected. Please select a subfolder instead, or switch to System Default."
+    "systemFolderBlockedNotice": "Restricted system directory detected. Please select a subfolder instead, or switch to System Default.",
+    "completedTitle": "Download Completed",
+    "completedSubtitle": "File has been successfully saved to your local device",
+    "completedFileName": "File Name",
+    "completedFileSize": "File Size",
+    "completedSaveDir": "Save Location",
+    "completedDefaultHintMac": "Tip: You can find the file in Finder → Downloads or press ⌥⌘L.",
+    "completedDefaultHintWin": "Tip: You can find the file in This PC → Downloads.",
+    "completedDefaultHintGeneric": "Tip: You can find the file in your system's Downloads folder or browser downloads.",
+    "btnConfirmComplete": "OK"
   },
   "batchViewer": {
     "textContent": "Message / Note",

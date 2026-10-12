@@ -15,6 +15,7 @@ import {
   HelpCircle,
   ChevronDown,
   ChevronUp,
+  Check,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ShareItem } from '../../shared/types.js';
@@ -36,6 +37,12 @@ import {
   getOsDisplayName,
   getOsDownloadsFolderName,
 } from '../utils/platform';
+
+interface DownloadCompletedInfo {
+  fileName: string;
+  fileSize: number;
+  dirName: string;
+}
 
 interface DownloadModalProps {
   isOpen: boolean;
@@ -61,6 +68,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
   });
   const [loadingDir, setLoadingDir] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [completedInfo, setCompletedInfo] = useState<DownloadCompletedInfo | null>(null);
   const [progress, setProgress] = useState<{ percent: number; loaded: number; total: number }>({
     percent: 0,
     loaded: 0,
@@ -77,13 +85,14 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
   const osName = getOsDisplayName(os);
   const osFolder = getOsDownloadsFolderName(os, isEnglish);
 
-  // 每次打开弹窗时，读取浏览器缓存的下载设置信息
+  // 每次打开弹窗时，读取浏览器缓存的下载设置信息并重置状态
   useEffect(() => {
     if (isOpen) {
       setErrorMessage(null);
       setShowBlockedNotice(false);
       setProgress({ percent: 0, loaded: 0, total: 0 });
       setDownloading(false);
+      setCompletedInfo(null);
       setLoadingDir(true);
 
       getSavedDownloadDirectory()
@@ -137,6 +146,29 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
     }
   };
 
+  // 点击确认关闭完成态弹窗
+  const handleConfirmComplete = () => {
+    if (completedInfo) {
+      if (onSuccess) {
+        onSuccess(completedInfo.dirName, completedInfo.fileName);
+      }
+      setCompletedInfo(null);
+    }
+    onClose();
+  };
+
+  // 退出弹窗
+  const handleClose = () => {
+    if (downloading) return;
+    if (completedInfo) {
+      if (onSuccess) {
+        onSuccess(completedInfo.dirName, completedInfo.fileName);
+      }
+      setCompletedInfo(null);
+    }
+    onClose();
+  };
+
   // 执行下载
   const handleStartDownload = async () => {
     setErrorMessage(null);
@@ -148,14 +180,16 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
       if (selectedType === 'browser_default' || !isSupported) {
         await setBrowserDefaultDownload();
         triggerBrowserFallbackDownload(downloadUrl, fileName);
-        if (onSuccess) {
-          const defaultTitle = t('downloadModal.destDefaultTitle', {
-            osFolder,
-            defaultValue: `系统默认下载目录 (${osFolder})`,
-          });
-          onSuccess(defaultTitle, fileName);
-        }
-        onClose();
+
+        const defaultDirName = isMac || os === 'linux'
+          ? `~/Downloads (${osFolder})`
+          : osFolder;
+
+        setCompletedInfo({
+          fileName,
+          fileSize: item.fileSize,
+          dirName: defaultDirName,
+        });
         return;
       }
 
@@ -185,7 +219,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
       }
 
       // 将文件直接流式写入到已选定的目标目录中
-      await saveFileToDirectoryHandle(
+      const result = await saveFileToDirectoryHandle(
         activeHandle,
         fileName,
         downloadUrl,
@@ -194,10 +228,11 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
         }
       );
 
-      if (onSuccess) {
-        onSuccess(activeDirName || '本地目录', fileName);
-      }
-      onClose();
+      setCompletedInfo({
+        fileName: result?.fileName || fileName,
+        fileSize: result?.size || item.fileSize,
+        dirName: activeDirName || '本地目录',
+      });
     } catch (err: any) {
       setErrorMessage(err?.message || t('downloadModal.downloadFailed', '下载失败'));
     } finally {
@@ -219,34 +254,154 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in"
+      onClick={!downloading ? handleClose : undefined}
+    >
       <div
         className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-100 overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* 头部 */}
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
-              <Download className="w-4 h-4" />
+        {completedInfo ? (
+          /* ===== 下载完成展示状态 ===== */
+          <>
+            {/* 头部 */}
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-emerald-50/40">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800">
+                    {t('downloadModal.completedTitle', '文件下载完成')}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    {t('downloadModal.completedSubtitle', '文件已成功保存至本地设备')}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleConfirmComplete}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition cursor-pointer"
+                title={t('records.close', '关闭')}
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-800">
-                {t('downloadModal.title', '下载文件')}
-              </h3>
-              <p className="text-[11px] text-slate-500">
-                {t('downloadModal.subtitle', '选择或确认下载保存目录')}
-              </p>
+
+            {/* 完成详情主体 */}
+            <div className="p-5 space-y-4">
+              <div className="flex flex-col items-center justify-center pt-2 pb-1 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-200/80 text-emerald-600 flex items-center justify-center shadow-xs mb-2.5">
+                  <CheckCircle2 className="w-8 h-8" />
+                </div>
+                <h4 className="text-base font-bold text-slate-800">
+                  {t('downloadModal.completedTitle', '文件下载完成')}
+                </h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {t('downloadModal.completedSubtitle', '文件已成功保存至本地设备')}
+                </p>
+              </div>
+
+              {/* 文件信息清单：文件名称、下载文件大小、下载目录地址 */}
+              <div className="bg-slate-50 rounded-xl border border-slate-200/90 divide-y divide-slate-100 p-1 text-xs">
+                {/* 1. 文件名称 */}
+                <div className="flex items-center justify-between py-2.5 px-3">
+                  <span className="text-slate-500 font-medium shrink-0 flex items-center gap-1.5">
+                    <File className="w-3.5 h-3.5 text-slate-400" />
+                    {t('downloadModal.completedFileName', '文件名称')}
+                  </span>
+                  <span
+                    className="font-semibold text-slate-800 truncate max-w-[260px] text-right font-mono"
+                    title={completedInfo.fileName}
+                  >
+                    {completedInfo.fileName}
+                  </span>
+                </div>
+
+                {/* 2. 下载文件大小 */}
+                <div className="flex items-center justify-between py-2.5 px-3">
+                  <span className="text-slate-500 font-medium shrink-0 flex items-center gap-1.5">
+                    <HardDrive className="w-3.5 h-3.5 text-slate-400" />
+                    {t('downloadModal.completedFileSize', '下载文件大小')}
+                  </span>
+                  <div className="flex items-center gap-1.5 font-mono">
+                    <span className="font-bold text-slate-800">
+                      {formatBytes(completedInfo.fileSize)}
+                    </span>
+                    {(item.type === 'folder' || item.type === 'batch') && (
+                      <span className="px-1.5 py-0.2 bg-amber-100 text-amber-700 text-[10px] rounded font-sans font-medium">
+                        ZIP
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* 3. 下载目录地址 */}
+                <div className="flex items-start justify-between py-2.5 px-3 gap-2">
+                  <span className="text-slate-500 font-medium shrink-0 flex items-center gap-1.5 mt-0.5">
+                    <FolderOpen className="w-3.5 h-3.5 text-blue-600" />
+                    {t('downloadModal.completedSaveDir', '下载目录地址')}
+                  </span>
+                  <span className="font-semibold text-blue-700 break-all text-right font-mono bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                    {completedInfo.dirName}
+                  </span>
+                </div>
+              </div>
+
+              {/* 针对不同系统的定位提示 */}
+              <div className="p-3 bg-blue-50/70 border border-blue-100/90 rounded-xl text-[11px] text-blue-900 flex items-start gap-2.5 leading-relaxed">
+                <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <span>
+                  {isMac
+                    ? t('downloadModal.completedDefaultHintMac', '提示：可前往访达(Finder)中的「下载」文件夹或使用快捷键 ⌥⌘L 查看文件。')
+                    : os === 'windows'
+                    ? t('downloadModal.completedDefaultHintWin', '提示：可前往「此电脑」中的「下载」文件夹查看文件。')
+                    : t('downloadModal.completedDefaultHintGeneric', '提示：可前往操作系统的「下载」文件夹或浏览器下载管理器查看。')}
+                </span>
+              </div>
             </div>
-          </div>
-          <button
-            onClick={onClose}
-            disabled={downloading}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition disabled:opacity-40"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+
+            {/* 确认操作底部栏 */}
+            <div className="px-5 py-3.5 bg-slate-50/80 border-t border-slate-100 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={handleConfirmComplete}
+                className="px-6 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:scale-95 rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>{t('downloadModal.btnConfirmComplete', '确认')}</span>
+              </button>
+            </div>
+          </>
+        ) : (
+          /* ===== 原有目录选择与下载配置 ===== */
+          <>
+            {/* 头部 */}
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                  <Download className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800">
+                    {t('downloadModal.title', '下载文件')}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    {t('downloadModal.subtitle', '选择或确认下载保存目录')}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleClose}
+                disabled={downloading}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition disabled:opacity-40"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
         {/* 内容区 */}
         <div className="p-5 space-y-4">
@@ -558,7 +713,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
         <div className="px-5 py-3.5 bg-slate-50/80 border-t border-slate-100 flex items-center justify-end gap-2.5">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             disabled={downloading}
             className="px-3.5 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-200/60 rounded-xl transition disabled:opacity-40"
           >
@@ -584,7 +739,9 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
             )}
           </button>
         </div>
-      </div>
-    </div>
+      </>
+    )}
+  </div>
+</div>
   );
 };
