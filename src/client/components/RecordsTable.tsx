@@ -23,6 +23,13 @@ import {
   ChevronDown,
   Layers,
   Images,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Clock,
+  ArrowDownAZ,
+  ArrowUpZA,
+  BarChart3,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ShareItem, ShareItemType, SystemStats } from '@shared/types';
@@ -38,6 +45,9 @@ import { ClearRecordsModal, ClearRecordsOptions } from './ClearRecordsModal';
 import { ImageViewerModal } from './ImageViewerModal';
 import { BatchViewerModal } from './BatchViewerModal';
 import { getCharacterInfo, getDisplayNickname } from '../utils/nickname';
+
+export type SortField = 'time' | 'name' | 'size';
+export type SortOrder = 'asc' | 'desc';
 
 interface RecordsTableProps {
   records: ShareItem[];
@@ -92,6 +102,107 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
   const [clearRecordsModalOpen, setClearRecordsModalOpen] = useState(false);
   const [batchViewerItem, setBatchViewerItem] = useState<{ item: ShareItem; password?: string } | null>(null);
   const [batchDownloading, setBatchDownloading] = useState(false);
+
+  // 排序维度：按时间、按名称、按大小
+  const [sortBy, setSortBy] = useState<SortField>(() => {
+    try {
+      const saved = localStorage.getItem('lightdrop_sort_by');
+      if (saved === 'time' || saved === 'name' || saved === 'size') return saved;
+    } catch (_) {}
+    return 'time';
+  });
+
+  // 排序方向：升序 / 降序
+  const [sortOrder, setSortOrder] = useState<SortOrder>(() => {
+    try {
+      const saved = localStorage.getItem('lightdrop_sort_order');
+      if (saved === 'asc' || saved === 'desc') return saved;
+    } catch (_) {}
+    return 'desc';
+  });
+
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+
+  // 更新排序状态并持久化至 localStorage
+  const updateSort = (field: SortField, order: SortOrder) => {
+    setSortBy(field);
+    setSortOrder(order);
+    try {
+      localStorage.setItem('lightdrop_sort_by', field);
+      localStorage.setItem('lightdrop_sort_order', order);
+    } catch (_) {}
+  };
+
+  // 切换当前维度的升降序
+  const handleToggleSortOrder = () => {
+    const nextOrder: SortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+    updateSort(sortBy, nextOrder);
+  };
+
+  // 表头点击切换排序：同列反转，不同列使用最符合直觉的默认方向
+  const handleToggleHeaderSort = (field: SortField) => {
+    if (sortBy === field) {
+      updateSort(field, sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      const defaultOrder: SortOrder = field === 'name' ? 'asc' : 'desc';
+      updateSort(field, defaultOrder);
+    }
+  };
+
+  // 获取当前排序文本标签
+  const getCurrentSortLabel = () => {
+    if (sortBy === 'time') return t('records.sortByTime', '按时间');
+    if (sortBy === 'name') return t('records.sortByName', '按名称');
+    if (sortBy === 'size') return t('records.sortBySize', '按大小');
+    return t('records.sortBy', '排序');
+  };
+
+  // 渲染表头排序指示图标
+  const renderSortIndicator = (field: SortField) => {
+    if (sortBy === field) {
+      return sortOrder === 'asc' ? (
+        <ArrowUp className="w-3 h-3 text-blue-600 shrink-0 inline ml-0.5" />
+      ) : (
+        <ArrowDown className="w-3 h-3 text-blue-600 shrink-0 inline ml-0.5" />
+      );
+    }
+    return (
+      <ArrowUpDown className="w-3 h-3 text-slate-300 group-hover/th:text-slate-500 shrink-0 inline ml-0.5 opacity-0 group-hover/th:opacity-100 transition-opacity" />
+    );
+  };
+
+  // 根据当前排序规则稳定计算已排序记录列表
+  const sortedRecords = useMemo(() => {
+    return [...records].sort((a, b) => {
+      if (sortBy === 'time') {
+        const timeA = new Date(a.createdAt).getTime() || 0;
+        const timeB = new Date(b.createdAt).getTime() || 0;
+        return sortOrder === 'asc' ? timeA - timeB : timeB - timeA;
+      }
+      if (sortBy === 'name') {
+        const nameA = (a.title || a.fileName || a.content || '').trim();
+        const nameB = (b.title || b.fileName || b.content || '').trim();
+        const cmp = nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+        if (cmp !== 0) {
+          return sortOrder === 'asc' ? cmp : -cmp;
+        }
+        const timeA = new Date(a.createdAt).getTime() || 0;
+        const timeB = new Date(b.createdAt).getTime() || 0;
+        return timeB - timeA;
+      }
+      if (sortBy === 'size') {
+        const sizeA = typeof a.fileSize === 'number' ? a.fileSize : 0;
+        const sizeB = typeof b.fileSize === 'number' ? b.fileSize : 0;
+        if (sizeA !== sizeB) {
+          return sortOrder === 'asc' ? sizeA - sizeB : sizeB - sizeA;
+        }
+        const timeA = new Date(a.createdAt).getTime() || 0;
+        const timeB = new Date(b.createdAt).getTime() || 0;
+        return timeB - timeA;
+      }
+      return 0;
+    });
+  }, [records, sortBy, sortOrder]);
 
   // 获取文件直接下载直链 (直接向 download 接口请求)
   const getItemDirectUrl = (item: ShareItem): string => {
@@ -697,10 +808,13 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
   return (
     <div id="records-section" className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden relative">
       {/* 点击外部区域收起下拉菜单 */}
-      {activeDropdown && (
+      {(activeDropdown || sortDropdownOpen) && (
         <div
           className="fixed inset-0 z-20 cursor-default"
-          onClick={() => setActiveDropdown(null)}
+          onClick={() => {
+            setActiveDropdown(null);
+            setSortDropdownOpen(false);
+          }}
         />
       )}
 
@@ -782,6 +896,175 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
             />
           </div>
 
+          {/* 排序控件组 (按时间、按名称、按大小及升降序快速切换) */}
+          <div className="relative inline-flex items-center rounded-xl border border-slate-200/90 bg-white shadow-2xs shrink-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSortDropdownOpen((prev) => !prev);
+              }}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:text-blue-600 hover:bg-slate-50/80 rounded-l-xl transition whitespace-nowrap"
+              title={t('records.sortBy', '排序')}
+            >
+              <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span>{getCurrentSortLabel()}</span>
+              <ChevronDown className="w-3 h-3 text-slate-400 shrink-0 -ml-0.5" />
+            </button>
+
+            <div className="h-3.5 w-px bg-slate-200 shrink-0" />
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggleSortOrder();
+              }}
+              className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-50/80 rounded-r-xl transition shrink-0"
+              title={sortOrder === 'asc' ? t('records.sortDesc', '降序') : t('records.sortAsc', '升序')}
+            >
+              {sortOrder === 'asc' ? (
+                <ArrowUp className="w-3.5 h-3.5 text-blue-600" />
+              ) : (
+                <ArrowDown className="w-3.5 h-3.5 text-blue-600" />
+              )}
+            </button>
+
+            {/* 排序下拉浮窗 */}
+            {sortDropdownOpen && (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-xl shadow-xl border border-slate-200/90 py-1 z-30 animate-fade-in text-xs divide-y divide-slate-100/90"
+              >
+                <div className="py-1">
+                  <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    {t('records.sortByTime', '按时间')}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateSort('time', 'desc');
+                      setSortDropdownOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 text-left transition ${
+                      sortBy === 'time' && sortOrder === 'desc'
+                        ? 'text-blue-600 bg-blue-50/70 font-semibold'
+                        : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span>{t('records.sortTimeDesc', '时间：最新优先')}</span>
+                    </span>
+                    {sortBy === 'time' && sortOrder === 'desc' && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateSort('time', 'asc');
+                      setSortDropdownOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 text-left transition ${
+                      sortBy === 'time' && sortOrder === 'asc'
+                        ? 'text-blue-600 bg-blue-50/70 font-semibold'
+                        : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span>{t('records.sortTimeAsc', '时间：最早优先')}</span>
+                    </span>
+                    {sortBy === 'time' && sortOrder === 'asc' && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                  </button>
+                </div>
+
+                <div className="py-1">
+                  <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    {t('records.sortByName', '按名称')}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateSort('name', 'asc');
+                      setSortDropdownOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 text-left transition ${
+                      sortBy === 'name' && sortOrder === 'asc'
+                        ? 'text-blue-600 bg-blue-50/70 font-semibold'
+                        : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <ArrowDownAZ className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span>{t('records.sortNameAsc', '名称：A → Z')}</span>
+                    </span>
+                    {sortBy === 'name' && sortOrder === 'asc' && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateSort('name', 'desc');
+                      setSortDropdownOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 text-left transition ${
+                      sortBy === 'name' && sortOrder === 'desc'
+                        ? 'text-blue-600 bg-blue-50/70 font-semibold'
+                        : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <ArrowUpZA className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span>{t('records.sortNameDesc', '名称：Z → A')}</span>
+                    </span>
+                    {sortBy === 'name' && sortOrder === 'desc' && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                  </button>
+                </div>
+
+                <div className="py-1">
+                  <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    {t('records.sortBySize', '按大小')}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateSort('size', 'desc');
+                      setSortDropdownOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 text-left transition ${
+                      sortBy === 'size' && sortOrder === 'desc'
+                        ? 'text-blue-600 bg-blue-50/70 font-semibold'
+                        : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <BarChart3 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span>{t('records.sortSizeDesc', '大小：从大到小')}</span>
+                    </span>
+                    {sortBy === 'size' && sortOrder === 'desc' && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateSort('size', 'asc');
+                      setSortDropdownOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 text-left transition ${
+                      sortBy === 'size' && sortOrder === 'asc'
+                        ? 'text-blue-600 bg-blue-50/70 font-semibold'
+                        : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <BarChart3 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span>{t('records.sortSizeAsc', '大小：从小到大')}</span>
+                    </span>
+                    {sortBy === 'size' && sortOrder === 'asc' && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* 全选 */}
           <label className="flex items-center gap-1.5 text-xs text-slate-600 select-none cursor-pointer pl-1">
             <input
@@ -841,22 +1124,50 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
 
       {/* 数据表格 */}
       <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[1020px]">
+        <table className="w-full text-left border-collapse min-w-[1040px]">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50/60 text-[11px] font-medium text-slate-400 select-none whitespace-nowrap">
               <th className="py-2.5 px-4 w-10 text-center shrink-0"></th>
               <th className="py-2.5 px-3 w-24 shrink-0">{t('records.thType')}</th>
-              <th className="py-2.5 px-4 min-w-[220px] max-w-[460px]">{t('records.thContent')}</th>
+              <th
+                onClick={() => handleToggleHeaderSort('name')}
+                className="py-2.5 px-4 min-w-[200px] max-w-[420px] cursor-pointer hover:text-blue-600 transition group/th select-none"
+                title={sortBy === 'name' ? (sortOrder === 'asc' ? t('records.sortNameDesc') : t('records.sortNameAsc')) : t('records.sortByName')}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>{t('records.thContent')}</span>
+                  {renderSortIndicator('name')}
+                </div>
+              </th>
+              <th
+                onClick={() => handleToggleHeaderSort('size')}
+                className="py-2.5 px-3 w-24 shrink-0 cursor-pointer hover:text-blue-600 transition group/th select-none"
+                title={sortBy === 'size' ? (sortOrder === 'desc' ? t('records.sortSizeAsc') : t('records.sortSizeDesc')) : t('records.sortBySize')}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>{t('records.thSize', '大小')}</span>
+                  {renderSortIndicator('size')}
+                </div>
+              </th>
               <th className="py-2.5 px-3 w-28 shrink-0 text-center">{t('records.thSender', '发送者')}</th>
-              <th className="py-2.5 px-4 w-28 shrink-0">{t('records.thTime')}</th>
+              <th
+                onClick={() => handleToggleHeaderSort('time')}
+                className="py-2.5 px-4 w-28 shrink-0 cursor-pointer hover:text-blue-600 transition group/th select-none"
+                title={sortBy === 'time' ? (sortOrder === 'desc' ? t('records.sortTimeAsc') : t('records.sortTimeDesc')) : t('records.sortByTime')}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>{t('records.thTime')}</span>
+                  {renderSortIndicator('time')}
+                </div>
+              </th>
               <th className="py-2.5 px-4 w-32 shrink-0 text-center">{t('records.thPermission')}</th>
               <th className="py-2.5 px-4 min-w-[390px] shrink-0 text-right">{t('records.thActions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-xs">
-            {records.length === 0 ? (
+            {sortedRecords.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-12 text-center text-slate-400">
+                <td colSpan={8} className="py-12 text-center text-slate-400">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
                       <Search className="w-5 h-5" />
@@ -866,7 +1177,7 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                 </td>
               </tr>
             ) : (
-              records.map((item) => {
+              sortedRecords.map((item) => {
                 const isSelected = selectedIds.has(item.id);
                 return (
                   <tr
@@ -934,7 +1245,7 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                     </td>
 
                     {/* 内容 / 文件名 */}
-                    <td className="py-3 px-4 min-w-[220px] max-w-[460px]">
+                    <td className="py-3 px-4 min-w-[200px] max-w-[420px]">
                       <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-1.5 min-w-0">
                           {item.isUrl ? (
@@ -969,8 +1280,6 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                           )}
                         </div>
                         <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1.5 min-w-0">
-                          <span className="shrink-0">{formatBytes(item.fileSize)}</span>
-                          <span className="shrink-0 text-slate-300">·</span>
                           <span className="truncate">
                             {item.type === 'text'
                               ? item.isUrl
@@ -984,9 +1293,8 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                                     chars: item.content.length,
                                     count: item.files?.length || item.fileCount || 0,
                                   })
-                                : t('records.batchCountSummary', '共 {{count}} 个文件，{{size}}', {
-                                    count: item.files?.length || 0,
-                                    size: formatBytes(item.fileSize),
+                                : t('records.batchCountOnly', '共 {{count}} 个文件', {
+                                    count: item.files?.length || item.fileCount || 0,
                                   })
                               : item.type === 'image'
                               ? t('records.imageFile')
@@ -994,6 +1302,11 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                           </span>
                         </div>
                       </div>
+                    </td>
+
+                    {/* 大小 */}
+                    <td className="py-3 px-3 w-24 shrink-0 text-slate-600 whitespace-nowrap font-mono text-[11px] align-middle">
+                      {formatBytes(item.fileSize)}
                     </td>
 
                     {/* 发送者 / 角色昵称 */}
