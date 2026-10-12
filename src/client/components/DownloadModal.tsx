@@ -206,7 +206,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
   };
 
   const renderIcon = () => {
-    if (item.type === 'folder') {
+    if (item.type === 'folder' || item.type === 'batch') {
       return <FileArchive className="w-6 h-6 text-amber-500" />;
     }
     if (item.type === 'image') {
@@ -261,7 +261,7 @@ export const DownloadModal: React.FC<DownloadModalProps> = ({
               </div>
               <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500 font-mono">
                 <span>{formatBytes(item.fileSize)}</span>
-                {item.type === 'folder' && (
+                {(item.type === 'folder' || item.type === 'batch') && (
                   <span className="px-1.5 py-0.2 bg-amber-100 text-amber-700 text-[10px] rounded font-sans font-medium">
                     {t('downloadModal.folderZipBadge', '打包为 ZIP')}
                   </span>

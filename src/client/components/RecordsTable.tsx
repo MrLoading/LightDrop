@@ -468,6 +468,9 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
           filename = decodeURIComponent(match[1].replace(/["']/g, ''));
         }
       }
+      if (!filename.toLowerCase().endsWith('.zip')) {
+        filename = `${filename}.zip`;
+      }
       a.download = filename;
       document.body.appendChild(a);
       a.click();

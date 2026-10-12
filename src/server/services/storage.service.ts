@@ -41,12 +41,21 @@ export class StorageService {
   /**
    * 打包某个记录目录为 zip 流下载
    */
-  public createZipArchiveStream(sourceDir: string, zipName: string, res: any): void {
+  public createZipArchiveStream(sourceDir: string, zipName: string, res: any, textContent?: string): void {
     const archive = archiver('zip', {
       zlib: { level: 6 },
     });
 
-    res.attachment(zipName);
+    const cleanName = (zipName || 'Archive').replace(/[\\/:*?"<>|]/g, '_').trim();
+    const safeZipName = cleanName.toLowerCase().endsWith('.zip') ? cleanName : `${cleanName}.zip`;
+    const encodedName = encodeURIComponent(safeZipName);
+
+    // 标准 RFC 5987 / RFC 6266 头：确保 Safari、Chrome、Edge、Firefox 均能正确解析 UTF-8 中文文件名与 .zip 后缀
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="archive.zip"; filename*=UTF-8''${encodedName}`
+    );
 
     archive.on('error', (err) => {
       console.error('[StorageService] Zip stream error:', err);
@@ -56,7 +65,29 @@ export class StorageService {
     });
 
     archive.pipe(res);
-    archive.directory(sourceDir, false);
+
+    // 1. 如果存在物理文件目录，将目录内所有文件加入压缩包根目录
+    if (fs.existsSync(sourceDir)) {
+      archive.directory(sourceDir, false);
+    }
+
+    // 2. 如果包含文字说明内容，将正文内容导出为 Markdown 文件置入压缩包根目录
+    if (textContent && textContent.trim()) {
+      const firstLine = textContent.split('\n')[0].replace(/^[#\s*-_>]+/, '').replace(/[\\/:*?"<>|]/g, '_').trim();
+      let cleanTitle = (
+        firstLine.substring(0, 40) ||
+        safeZipName.replace(/\.zip$/i, '').replace(/\s*\(含\d+个附件\)/, '') ||
+        '说明文档'
+      ).replace(/[\\/:*?"<>|]/g, '_').trim();
+      let mdFileName = cleanTitle.toLowerCase().endsWith('.md') ? cleanTitle : `${cleanTitle || '说明文档'}.md`;
+
+      // 若已有同名文件，添加 _说明 后缀避免重名覆盖
+      if (fs.existsSync(sourceDir) && fs.existsSync(path.join(sourceDir, mdFileName))) {
+        mdFileName = `${cleanTitle.replace(/\.md$/i, '')}_说明.md`;
+      }
+      archive.append(textContent, { name: mdFileName });
+    }
+
     archive.finalize();
   }
 
@@ -72,7 +103,15 @@ export class StorageService {
       zlib: { level: 6 },
     });
 
-    res.attachment(zipName);
+    const cleanName = (zipName || 'LightDrop_Archive').replace(/[\\/:*?"<>|]/g, '_').trim();
+    const safeZipName = cleanName.toLowerCase().endsWith('.zip') ? cleanName : `${cleanName}.zip`;
+    const encodedName = encodeURIComponent(safeZipName);
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="archive.zip"; filename*=UTF-8''${encodedName}`
+    );
 
     archive.on('error', (err) => {
       console.error('[StorageService] Multi-records zip stream error:', err);
@@ -95,6 +134,22 @@ export class StorageService {
           if (item.type === 'folder' || item.type === 'batch') {
             const folderName = (item.title || 'Collection').replace(/[\\/:*?"<>|]/g, '_').trim();
             archive.directory(itemDir, folderName);
+
+            // 如果该合辑或文件夹包含文字说明内容，生成 Markdown 文件并置入对应文件夹内
+            if (item.content && item.content.trim()) {
+              const firstLine = item.content.split('\n')[0].replace(/^[#\s*-_>]+/, '').replace(/[\\/:*?"<>|]/g, '_').trim();
+              let cleanTitle = (
+                firstLine.substring(0, 40) ||
+                folderName.replace(/\s*\(含\d+个附件\)/, '') ||
+                '说明文档'
+              ).replace(/[\\/:*?"<>|]/g, '_').trim();
+              let mdFileName = cleanTitle.toLowerCase().endsWith('.md') ? cleanTitle : `${cleanTitle || '说明文档'}.md`;
+
+              if (fs.existsSync(path.join(itemDir, mdFileName))) {
+                mdFileName = `${cleanTitle.replace(/\.md$/i, '')}_说明.md`;
+              }
+              archive.append(item.content, { name: path.posix.join(folderName, mdFileName) });
+            }
           } else {
             const fileName = item.fileName || item.title;
             const filePath = path.join(itemDir, fileName);
@@ -105,6 +160,11 @@ export class StorageService {
               if (files.length > 0) {
                 archive.file(path.join(itemDir, files[0]), { name: files[0] });
               }
+            }
+            if (item.content && item.content.trim()) {
+              const firstLine = item.content.split('\n')[0].replace(/^[#\s*-_>]+/, '').replace(/[\\/:*?"<>|]/g, '_').trim();
+              const mdFileName = `${(firstLine.substring(0, 30) || item.title || '说明文档').replace(/[\\/:*?"<>|]/g, '_').trim()}_说明.md`;
+              archive.append(item.content, { name: mdFileName });
             }
           }
         }

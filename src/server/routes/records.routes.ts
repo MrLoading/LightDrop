@@ -587,12 +587,11 @@ recordsRouter.get('/:id/download', (req: Request, res: Response) => {
     }
   }
 
-  // 批量合辑或文件夹整包流式压缩下载
+  // 批量合辑或文件夹整包流式压缩下载 (同时自动包含正文 Markdown 与全部附件)
   if (item.type === 'folder' || item.type === 'batch') {
-    const zipName = encodeURIComponent(`${item.title}.zip`);
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${zipName}"; filename*=UTF-8''${zipName}`);
-    storageService.createZipArchiveStream(recordDir, `${item.title}.zip`, res);
+    const rawTitle = (item.title || 'Archive').replace(/[\\/:*?"<>|]/g, '_').trim();
+    const safeTitle = rawTitle.toLowerCase().endsWith('.zip') ? rawTitle : `${rawTitle}.zip`;
+    storageService.createZipArchiveStream(recordDir, safeTitle, res, item.content);
     return;
   }
 

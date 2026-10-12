@@ -186,8 +186,9 @@ export async function verifyDirectoryPermission(handle: FileSystemDirectoryHandl
  * 获取格式化后的文件名
  */
 export function getRecordDownloadFileName(item: ShareItem): string {
-  if (item.type === 'folder') {
-    return item.title?.toLowerCase().endsWith('.zip') ? item.title : `${item.title || 'Folder'}.zip`;
+  if (item.type === 'folder' || item.type === 'batch') {
+    const raw = (item.title || item.fileName || 'Archive').replace(/[\\/:*?"<>|]/g, '_').trim();
+    return raw.toLowerCase().endsWith('.zip') ? raw : `${raw}.zip`;
   }
   if (item.type === 'text') {
     const title = (item.title || 'Note').replace(/[\\/:*?"<>|]/g, '_').trim();
@@ -232,8 +233,15 @@ export async function saveFileToDirectoryHandle(
     throw new Error(errorMsg);
   }
 
+  // 确保当返回流为压缩包时，文件名始终保留 .zip 后缀
+  let finalFileName = fileName;
+  const contentType = response.headers.get('Content-Type') || '';
+  if (contentType.includes('zip') && !finalFileName.toLowerCase().endsWith('.zip')) {
+    finalFileName = `${finalFileName}.zip`;
+  }
+
   const contentLength = Number(response.headers.get('Content-Length')) || 0;
-  const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+  const fileHandle = await dirHandle.getFileHandle(finalFileName, { create: true });
   const writable = await (fileHandle as any).createWritable();
 
   if (response.body) {
