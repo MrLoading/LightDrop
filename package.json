@@ -10,7 +10,7 @@
     "dev": "concurrently -k -p \"[{name}]\" -n \"SERVER,CLIENT\" -c \"cyan,magenta\" \"pnpm dev:server\" \"pnpm dev:client\"",
     "build:client": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
-    "build": "pnpm build:client && pnpm build:server",
+    "build": "vite build && tsc -p tsconfig.server.json",
     "start": "node dist/server/index.js",
     "pm2:start": "pm2 start ecosystem.config.cjs",
     "pm2:stop": "pm2 stop lightdrop",

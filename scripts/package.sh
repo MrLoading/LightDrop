@@ -159,8 +159,19 @@ build_project() {
   # 清理可能存在的过期 tsbuildinfo 缓存
   rm -f "${REPO_ROOT}/tsconfig.server.tsbuildinfo" "${REPO_ROOT}/tsconfig.client.tsbuildinfo"
 
+  local node_bin
+  node_bin="$(get_node_bin)"
+  if [ -n "$node_bin" ]; then
+    local node_dir
+    node_dir="$(dirname "$node_bin")"
+    export PATH="${node_dir}:${PATH}"
+  fi
+
   if command -v pnpm >/dev/null 2>&1; then
     pnpm build
+  elif command -v npx >/dev/null 2>&1; then
+    log_info "未找到全局 pnpm，正在通过 npx 执行构建..."
+    npx vite build && npx tsc -p tsconfig.server.json
   elif command -v npm >/dev/null 2>&1; then
     npm run build
   else
@@ -296,13 +307,17 @@ package_binary() {
     rm -rf "${OUTPUT_DIR}/.tmp_standalone"
     mkdir -p "${temp_stage}"
 
-    # 拷贝构建产物与运行时所需文件
+    # 拷贝构建产物与运行时所需文件 (包含生产依赖库确保独立可运行)
     cp -r "${REPO_ROOT}/dist" "${temp_stage}/"
     cp -r "${REPO_ROOT}/public" "${temp_stage}/"
     cp "${REPO_ROOT}/package.json" "${temp_stage}/"
     cp "${REPO_ROOT}/ecosystem.config.cjs" "${temp_stage}/"
     if [ -f "${REPO_ROOT}/pnpm-lock.yaml" ]; then
       cp "${REPO_ROOT}/pnpm-lock.yaml" "${temp_stage}/"
+    fi
+    if [ -d "${REPO_ROOT}/node_modules" ]; then
+      log_info "正在复制依赖库 node_modules 至便携包..."
+      cp -R "${REPO_ROOT}/node_modules" "${temp_stage}/" 2>/dev/null || true
     fi
 
     # 生成一键启动脚本
@@ -313,7 +328,31 @@ cd "${SCRIPT_DIR}"
 export NODE_ENV=production
 export PORT="${PORT:-8080}"
 echo "Starting LightDrop on port ${PORT}..."
-exec node dist/server/index.js
+
+# 探测满足 Node.js >= 18 的运行环境
+NODE_BIN=""
+shopt -s nullglob 2>/dev/null || true
+for candidate in \
+  "$(command -v node 2>/dev/null)" \
+  /root/.nvm/versions/node/v*/bin/node \
+  "${HOME}/.nvm/versions/node/v*/bin/node" \
+  /usr/local/bin/node \
+  /opt/homebrew/bin/node; do
+  if [ -x "$candidate" ]; then
+    v=$("$candidate" -v 2>/dev/null | sed -E 's/^v//' | cut -d. -f1)
+    if [ -n "$v" ] && [ "$v" -ge 18 ] 2>/dev/null; then
+      NODE_BIN="$candidate"
+      break
+    fi
+  fi
+done
+shopt -u nullglob 2>/dev/null || true
+
+if [ -z "$NODE_BIN" ]; then
+  NODE_BIN="node"
+fi
+
+exec "$NODE_BIN" dist/server/index.js
 RUN_EOF
     chmod +x "${temp_stage}/run.sh"
 
@@ -329,8 +368,11 @@ RUN_EOF
 }
 
 # ----------------- 执行各构建目标 -----------------
-build_project
- 
+# 仅当构建目标包含 binary 或 all 时才需要在宿主机编译；Docker 构建由 Dockerfile 独立完成
+if [ "$TARGET" != "docker" ]; then
+  build_project
+fi
+
 if [ "$TARGET" = "all" ] || [ "$TARGET" = "docker" ]; then
   package_docker
 fi

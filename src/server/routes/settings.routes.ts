@@ -20,7 +20,11 @@ settingsRouter.get('/', (req: Request, res: Response) => {
   const clientIp = auditService.getClientIp(req);
   const isAdmin = auditService.isAdmin(req);
   const configFilePath = configManager.getConfigFilePath();
-  const deviceIps = Array.from(new Set(['127.0.0.1', ...getAllNetworkIps().map((item) => item.ip)]));
+  const baseIps = ['127.0.0.1', ...getAllNetworkIps().map((item) => item.ip)];
+  if (fs.existsSync('/.dockerenv')) {
+    baseIps.push('172.17.0.1');
+  }
+  const deviceIps = Array.from(new Set(baseIps));
 
   let isWritable = false;
   let diskSizeBytes = 0;
@@ -140,7 +144,11 @@ settingsRouter.post('/', (req: Request, res: Response) => {
   const clientIp = auditService.getClientIp(req);
   const isAdmin = auditService.isAdmin(req);
   const configFilePath = configManager.getConfigFilePath();
-  const deviceIps = Array.from(new Set(['127.0.0.1', ...getAllNetworkIps().map((item) => item.ip)]));
+  const baseIps = ['127.0.0.1', ...getAllNetworkIps().map((item) => item.ip)];
+  if (fs.existsSync('/.dockerenv')) {
+    baseIps.push('172.17.0.1');
+  }
+  const deviceIps = Array.from(new Set(baseIps));
 
   let isWritable = false;
   let diskSizeBytes = 0;

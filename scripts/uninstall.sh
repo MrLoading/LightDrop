@@ -429,12 +429,13 @@ if [ "$DELETE_DATA" = true ]; then
 else
   log_info "安全保留数据目录: ${DATA_DIR}"
 
-  for sub in "app" "runinfo" "logs" "bin"; do
+  for sub in "app" "runinfo" "logs" "bin" "config"; do
     if [ -d "${WORK_DIR}/${sub}" ]; then
       rm -rf "${WORK_DIR:?}/${sub}"
     fi
   done
-  rm -f "${WORK_DIR}/lightdrop.config.json" "${WORK_DIR}/app.log" 2>/dev/null || true
+  rm -rf "${WORK_DIR}/lightdrop.config.json"
+  rm -f "${WORK_DIR}/app.log" 2>/dev/null || true
 
   log_success "服务运行程序、日志与配置已清理完毕"
 fi

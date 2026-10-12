@@ -29,6 +29,9 @@ CURRENT_OS="$(detect_os)"
 OS_PRETTY="$(get_os_pretty_name)"
 DEFAULT_WORK_DIR="$(get_default_work_dir)"
 NODE_BIN="$(get_node_bin)"
+if [ -n "$NODE_BIN" ]; then
+  export PATH="$(dirname "$NODE_BIN"):$PATH"
+fi
 
 # ----------------- 默认配置 -----------------
 WORK_DIR="${DEFAULT_WORK_DIR}"
@@ -452,7 +455,8 @@ RUNINFO_FILE="${RUNINFO_DIR}/lightdrop-runinfo.json"
 APP_DIR="${WORK_DIR}/app"
 LOG_DIR="${WORK_DIR}/logs"
 PID_FILE="${RUNINFO_DIR}/lightdrop.pid"
-CONFIG_FILE_PATH="${WORK_DIR}/lightdrop.config.json"
+CONFIG_DIR="${WORK_DIR}/config"
+CONFIG_FILE_PATH="${CONFIG_DIR}/lightdrop.config.json"
 
 # macOS LaunchAgent 路径推导
 if [ "$CURRENT_OS" = "macos" ]; then
@@ -489,8 +493,17 @@ if ! ensure_writable_dir "${WORK_DIR}"; then
 fi
 
 mkdir -p "${DATA_DIR}/files"
+mkdir -p "${CONFIG_DIR}"
 mkdir -p "${RUNINFO_DIR}"
 mkdir -p "${LOG_DIR}"
+
+if [ -f "${WORK_DIR}/lightdrop.config.json" ] && [ ! -L "${WORK_DIR}/lightdrop.config.json" ]; then
+  if [ ! -f "${CONFIG_FILE_PATH}" ]; then
+    cp -f "${WORK_DIR}/lightdrop.config.json" "${CONFIG_FILE_PATH}"
+  fi
+  rm -f "${WORK_DIR}/lightdrop.config.json"
+fi
+ln -sf "config/lightdrop.config.json" "${WORK_DIR}/lightdrop.config.json" 2>/dev/null || true
 
 if [ "$CURRENT_OS" = "macos" ] && [ "$DEPLOY_MODE" = "launchd" ]; then
   mkdir -p "$(dirname "${PLIST_PATH}")"
@@ -538,7 +551,95 @@ else
   log_step "3/5" "同步分发产物与应用引导配置..."
 fi
 
+# 端口可用性预检
+if is_port_in_use "${PORT}"; then
+  OCCUPY_INFO="$(get_process_on_port "${PORT}")"
+  IS_OWN_SERVICE=false
+  if [ "$DEPLOY_MODE" = "docker" ] && command -v docker >/dev/null 2>&1; then
+    if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -Eq "^${CONTAINER_NAME}\$"; then
+      IS_OWN_SERVICE=true
+    fi
+  elif [ "$DEPLOY_MODE" = "systemd" ] && command -v systemctl >/dev/null 2>&1; then
+    if systemctl is-active --quiet "${SERVICE_NAME}" 2>/dev/null; then
+      IS_OWN_SERVICE=true
+    fi
+  elif [ "$DEPLOY_MODE" = "launchd" ] && command -v launchctl >/dev/null 2>&1; then
+    if launchctl list 2>/dev/null | grep -q "${PLIST_LABEL}"; then
+      IS_OWN_SERVICE=true
+    fi
+  elif [ -f "${PID_FILE}" ]; then
+    OLD_PID=$(cat "${PID_FILE}" 2>/dev/null || true)
+    if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+      IS_OWN_SERVICE=true
+    fi
+  fi
+
+  if [ "$IS_OWN_SERVICE" != true ]; then
+    log_error "目标端口 ${PORT} 已被其他外部程序占用: ${OCCUPY_INFO:-未知进程}"
+    log_info "提示: 请使用 -p 参数指定可用端口，例如: ./deploy.sh -p 8088"
+    exit 1
+  fi
+fi
+
 APP_PID=""
+
+# 如果配置文件路径误为目录 (常见于早期未生成文件时被 Docker 挂载创建为目录)，安全移除
+if [ -d "${CONFIG_FILE_PATH}" ]; then
+  log_warn "检测到配置文件路径误为目录 (可能由早期异常容器挂载残留)，正在自动纠正..."
+  rm -rf "${CONFIG_FILE_PATH}"
+fi
+
+# 解析 ADMIN_IPS 转为 JSON array
+ADMIN_IPS_JSON="[]"
+if [ -n "$ADMIN_IPS" ]; then
+  ADMIN_IPS_JSON=$(echo "$ADMIN_IPS" | awk -F',' '{
+    printf "["
+    count = 0
+    for (i=1; i<=NF; i++) {
+      gsub(/^[ \t]+|[ \t]+$/, "", $i)
+      if (length($i) > 0) {
+        if (count > 0) printf ", "
+        printf "\"%s\"", $i
+        count++
+      }
+    }
+    printf "]"
+  }')
+fi
+
+# 写入主配置文件 lightdrop.config.json (支持免重启热更新，Docker与宿主机均生成)
+CONFIG_STORAGE_DIR="${DATA_DIR}"
+[ "$DEPLOY_MODE" = "docker" ] && CONFIG_STORAGE_DIR="/app/data"
+
+if [ ! -f "${CONFIG_FILE_PATH}" ]; then
+  cat <<BOOTSTRAP_JSON > "${CONFIG_FILE_PATH}"
+{
+  "storageDir": "${CONFIG_STORAGE_DIR}",
+  "port": ${PORT},
+  "maxFileSizeMB": 1024,
+  "autoCleanupDays": 7,
+  "siteTitle": "LightDrop",
+  "adminIps": ${ADMIN_IPS_JSON}
+}
+BOOTSTRAP_JSON
+else
+  log_info "更新现有配置文件中的参数与管理员 IP 列表..."
+  local_node="$(get_node_bin)"
+  "${local_node:-node}" -e '
+    const fs = require("fs");
+    const p = process.argv[1];
+    const targetStorage = process.argv[2];
+    const targetPort = parseInt(process.argv[3], 10);
+    const ips = JSON.parse(process.argv[4] || "[]");
+    try {
+      const cfg = JSON.parse(fs.readFileSync(p, "utf8"));
+      cfg.storageDir = targetStorage;
+      if (targetPort) cfg.port = targetPort;
+      if (ips.length > 0) cfg.adminIps = ips;
+      fs.writeFileSync(p, JSON.stringify(cfg, null, 2), "utf8");
+    } catch(e) {}
+  ' "${CONFIG_FILE_PATH}" "${CONFIG_STORAGE_DIR}" "${PORT}" "${ADMIN_IPS_JSON}" 2>/dev/null || true
+fi
 
 # 非 Docker 模式下，将应用产物同步至工作路径的 app 目录
 if [ "$DEPLOY_MODE" != "docker" ]; then
@@ -551,52 +652,6 @@ if [ "$DEPLOY_MODE" != "docker" ]; then
   cp "${REPO_ROOT}/ecosystem.config.cjs" "${APP_DIR}/"
   if [ -f "${REPO_ROOT}/pnpm-lock.yaml" ]; then
     cp "${REPO_ROOT}/pnpm-lock.yaml" "${APP_DIR}/"
-  fi
-
-  # 解析 ADMIN_IPS 转为 JSON array
-  ADMIN_IPS_JSON="[]"
-  if [ -n "$ADMIN_IPS" ]; then
-    ADMIN_IPS_JSON=$(echo "$ADMIN_IPS" | awk -F',' '{
-      printf "["
-      count = 0
-      for (i=1; i<=NF; i++) {
-        gsub(/^[ \t]+|[ \t]+$/, "", $i)
-        if (length($i) > 0) {
-          if (count > 0) printf ", "
-          printf "\"%s\"", $i
-          count++
-        }
-      }
-      printf "]"
-    }')
-  fi
-
-  # 写入主配置文件 lightdrop.config.json (支持免重启热更新)
-  if [ ! -f "${CONFIG_FILE_PATH}" ]; then
-    cat <<BOOTSTRAP_JSON > "${CONFIG_FILE_PATH}"
-{
-  "storageDir": "${DATA_DIR}",
-  "port": ${PORT},
-  "maxFileSizeMB": 1024,
-  "autoCleanupDays": 7,
-  "siteTitle": "LightDrop",
-  "adminIps": ${ADMIN_IPS_JSON}
-}
-BOOTSTRAP_JSON
-  else
-    if [ -n "$ADMIN_IPS" ]; then
-      log_info "更新现有配置文件中的管理员 IP 列表..."
-      "${NODE_BIN:-node}" -e '
-        const fs = require("fs");
-        const p = process.argv[1];
-        const ips = JSON.parse(process.argv[2]);
-        try {
-          const cfg = JSON.parse(fs.readFileSync(p, "utf8"));
-          cfg.adminIps = ips;
-          fs.writeFileSync(p, JSON.stringify(cfg, null, 2), "utf8");
-        } catch(e) {}
-      ' "${CONFIG_FILE_PATH}" "${ADMIN_IPS_JSON}" 2>/dev/null || true
-    fi
   fi
   cp -f "${CONFIG_FILE_PATH}" "${APP_DIR}/lightdrop.config.json"
 
@@ -700,8 +755,12 @@ PLIST_EOF
       exit 1
     fi
 
+    if [ -z "$NODE_BIN" ] || [ ! -x "$NODE_BIN" ]; then
+      NODE_BIN="$(get_node_bin)"
+    fi
     if [ -z "$NODE_BIN" ]; then
-      NODE_BIN="$(command -v node)"
+      log_error "未找到支持的 Node.js (>= 18.0.0)。请先安装 Node.js 18+ 或使用 NVM。"
+      exit 1
     fi
 
     SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}"
@@ -872,8 +931,8 @@ VBS_EOF
       --restart "${RESTART_POLICY}" \
       -p "${PORT}:8080" \
       -v "${DATA_DIR}:/app/data" \
-      -v "${CONFIG_FILE_PATH}:/app/lightdrop.config.json" \
-      -e LIGHTDROP_CONFIG_PATH=/app/lightdrop.config.json \
+      -v "${CONFIG_DIR}:/app/config" \
+      -e LIGHTDROP_CONFIG_PATH=/app/config/lightdrop.config.json \
       -e PORT=8080 \
       -e NODE_ENV=production \
       "${IMAGE_NAME}" >/dev/null
@@ -911,6 +970,14 @@ VBS_EOF
   # ----------------- Standalone 原生独立后台进程 -----------------
   standalone)
     log_info "准备原生后台常驻进程..."
+
+    if [ -z "$NODE_BIN" ] || [ ! -x "$NODE_BIN" ]; then
+      NODE_BIN="$(get_node_bin)"
+    fi
+    if [ -z "$NODE_BIN" ]; then
+      log_error "未找到支持的 Node.js (>= 18.0.0)。请先安装 Node.js 18+ 或使用 NVM。"
+      exit 1
+    fi
 
     if [ -f "${PID_FILE}" ]; then
       OLD_PID=$(cat "${PID_FILE}" 2>/dev/null || true)

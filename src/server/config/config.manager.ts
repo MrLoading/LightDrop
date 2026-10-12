@@ -64,7 +64,9 @@ class ConfigManager extends EventEmitter {
         const raw = fs.readFileSync(storageSettingsFile, 'utf-8');
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === 'object') {
-          this.currentSettings = { ...this.currentSettings, ...parsed };
+          // 系统级部署项 (storageDir, port) 严格以主配置文件 lightdrop.config.json 为准，避免容器/宿主机切换时相互污染
+          const { storageDir: _s, port: _p, ...appSettings } = parsed;
+          this.currentSettings = { ...this.currentSettings, ...appSettings };
         }
       }
     } catch (e) {
@@ -93,6 +95,17 @@ class ConfigManager extends EventEmitter {
     } catch (e) {
       console.warn('[Config] Error preparing config file for watching:', e);
     }
+
+    try {
+      const dir = path.dirname(this.configFilePath);
+      fs.watch(dir, (_eventType, filename) => {
+        if (filename && filename.toString().includes('lightdrop.config.json')) {
+          if (!this.isSelfSaving) {
+            this.reloadFromFile();
+          }
+        }
+      });
+    } catch (e) {}
 
     try {
       fs.watchFile(this.configFilePath, { interval: 1000 }, (curr, prev) => {

@@ -1,0 +1,8 @@
+node_modules
+dist-packages
+data
+.git
+.gemini
+*.log
+.DS_Store
+*.local

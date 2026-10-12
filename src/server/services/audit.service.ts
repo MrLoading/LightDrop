@@ -100,6 +100,14 @@ class AuditService {
       return true;
     }
 
+    // 3. 容器化部署判定：若在 Docker 容器内运行，宿主机通过端口映射访问时来源 IP 为网桥网关 (如 172.17.0.1)
+    if (
+      fs.existsSync('/.dockerenv') &&
+      (clientIp === '172.17.0.1' || (clientIp.startsWith('172.') && clientIp.endsWith('.1')))
+    ) {
+      return true;
+    }
+
     return false;
   }
 

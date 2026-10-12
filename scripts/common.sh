@@ -127,13 +127,17 @@ json_read() {
     echo ""
     return
   fi
-  if command -v node >/dev/null 2>&1; then
-    node -e "try { const d = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')); console.log(d[process.argv[2]] ?? ''); } catch(e) { console.log(''); }" "$file" "$key" 2>/dev/null || true
-  elif command -v python3 >/dev/null 2>&1; then
-    python3 -c "import sys, json; print(json.load(open(sys.argv[1])).get(sys.argv[2], ''))" "$file" "$key" 2>/dev/null || true
-  else
-    grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$file" 2>/dev/null | head -n1 | sed -E "s/\"$key\"[[:space:]]*:[[:space:]]*\"([^\"]*)\"/\1/" || true
+  local node_cmd
+  node_cmd="$(command -v node 2>/dev/null || which node 2>/dev/null || true)"
+  if [ -n "$node_cmd" ] && [ -x "$node_cmd" ]; then
+    "$node_cmd" -e 'try { const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); const v = d[process.argv[2]]; console.log(v !== undefined && v !== null ? v : ""); } catch(e) { console.log(""); }' "$file" "$key" 2>/dev/null || true
+    return
   fi
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c "import sys, json; print(json.load(open(sys.argv[1])).get(sys.argv[2], ''))" "$file" "$key" 2>/dev/null || true
+    return
+  fi
+  grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$file" 2>/dev/null | head -n1 | sed -E "s/\"$key\"[[:space:]]*:[[:space:]]*\"([^\"]*)\"/\1/" || true
 }
 
 # ----------------- 操作系统与架构探测 -----------------
@@ -231,11 +235,90 @@ get_default_work_dir() {
   esac
 }
 
-# ----------------- 获取精确 Node 可执行文件路径 -----------------
+# ----------------- 获取精确 Node 可执行文件路径 (优先匹配 >= 18 版本) -----------------
 get_node_bin() {
-  local bin=""
-  bin="$(command -v node 2>/dev/null || which node 2>/dev/null || true)"
-  echo "$bin"
+  local candidates=()
+
+  # 1. 当前 PATH 中的 node
+  local path_node
+  path_node="$(command -v node 2>/dev/null || which node 2>/dev/null || true)"
+  [ -n "$path_node" ] && candidates+=("$path_node")
+
+  # 2. 常见现代 Node 安装路径
+  candidates+=(
+    "/usr/local/bin/node"
+    "/opt/node/bin/node"
+    "${HOME}/.local/share/pnpm/node"
+  )
+
+  # 3. NVM 环境嗅探 (从高版本向低版本匹配)
+  local nvm_dirs=("${NVM_DIR:-}" "${HOME}/.nvm" "/root/.nvm")
+  for nd in "${nvm_dirs[@]}"; do
+    if [ -n "$nd" ] && [ -d "$nd/versions/node" ]; then
+      while IFS= read -r nvm_node; do
+        [ -n "$nvm_node" ] && candidates+=("$nvm_node")
+      done < <(find "$nd/versions/node" -maxdepth 3 -name "node" -type f 2>/dev/null | sort -V -r || true)
+    fi
+  done
+
+  # 4. 系统默认路径
+  candidates+=("/usr/bin/node")
+
+  # 遍历候选列表，优先返回版本 >= 18 的 Node
+  for candidate in "${candidates[@]}"; do
+    if [ -x "$candidate" ]; then
+      local ver_raw
+      ver_raw="$("$candidate" -v 2>/dev/null || true)"
+      local major
+      major="$(echo "$ver_raw" | sed -E 's/^v//' | cut -d. -f1 || true)"
+      if [[ "$major" =~ ^[0-9]+$ ]] && [ "$major" -ge 18 ]; then
+        echo "$candidate"
+        return 0
+      fi
+    fi
+  done
+
+  # 若未找到 >= 18 的版本，降级返回任意可用 node
+  for candidate in "${candidates[@]}"; do
+    if [ -x "$candidate" ]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+
+  echo ""
+}
+
+# ----------------- 检测指定 TCP 端口是否被占用 -----------------
+is_port_in_use() {
+  local port="$1"
+  [ -z "$port" ] && return 1
+
+  if command -v ss >/dev/null 2>&1; then
+    if ss -H -tulpn 2>/dev/null | grep -E "[:.]${port}[[:space:]]" >/dev/null 2>&1; then
+      return 0
+    fi
+  elif command -v netstat >/dev/null 2>&1; then
+    if netstat -tulpn 2>/dev/null | grep -E "[:.]${port}[[:space:]]" >/dev/null 2>&1; then
+      return 0
+    fi
+  elif command -v lsof >/dev/null 2>&1; then
+    if lsof -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
+get_process_on_port() {
+  local port="$1"
+  local info=""
+  if command -v ss >/dev/null 2>&1; then
+    info="$(ss -tulpn 2>/dev/null | grep -E "[:.]${port}[[:space:]]" | awk '{print $NF}' | head -n 1 || true)"
+  elif command -v lsof >/dev/null 2>&1; then
+    info="$(lsof -iTCP:"${port}" -sTCP:LISTEN 2>/dev/null | tail -n +2 | awk '{print $1 "[" $2 "]"}' | head -n 1 || true)"
+  fi
+  echo "$info"
 }
 
 # ----------------- 安全检查：拦截高危目录误删 -----------------
