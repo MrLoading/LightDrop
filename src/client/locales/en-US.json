@@ -335,7 +335,19 @@
     "saveFailed": "Failed to save settings",
     "fetchFailed": "Failed to fetch settings",
     "emptyDir": "Path cannot be empty",
-    "dirValid": "Path is valid and writable: {{path}}"
+    "dirValid": "Path is valid and writable: {{path}}",
+    "desktopNotificationTitle": "System Desktop Notifications",
+    "desktopNotificationSubtitle": "Show native desktop banners in your system",
+    "desktopNotificationDesc": "Show native OS banners (macOS / Windows) when receiving new shared items or downloads complete. Clicking brings EasyDrop to the front.",
+    "desktopNotificationUnsupported": "System notifications are unavailable in this browser context (non-HTTPS LAN). Top center notifications are active as fallback.",
+    "desktopNotificationDenied": "Desktop notifications were blocked by the browser. Please allow notifications in site settings via your address bar.",
+    "desktopNotificationUnprompted": "Notification permission not granted yet",
+    "enableDesktopNotification": "Enable Notifications",
+    "desktopNotificationEnabledLabel": "Enable desktop notification banners",
+    "permissionGranted": "Granted",
+    "sendTestNotification": "Send Test",
+    "testNotificationTitle": "LightDrop · Test Notification",
+    "testNotificationBody": "Desktop notifications are working! You will be alerted when new files arrive or downloads finish."
   },
   "footer": {
     "onlineVisitors": "Online Visitors",
@@ -472,7 +484,8 @@
     "guestVisitor": "LAN Guest"
   },
   "app": {
-    "incomingToast": "Received new shared item: \"{{title}}\""
+    "incomingToast": "Received new shared item: \"{{title}}\"",
+    "desktopIncomingTitle": "LightDrop · New item received"
   },
   "format": {
     "today": "Today",

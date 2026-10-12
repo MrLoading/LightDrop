@@ -335,7 +335,19 @@
     "saveFailed": "保存设置失败",
     "fetchFailed": "获取设置失败",
     "emptyDir": "路径不能为空",
-    "dirValid": "路径有效且可读写: {{path}}"
+    "dirValid": "路径有效且可读写: {{path}}",
+    "desktopNotificationTitle": "系统桌面消息通知",
+    "desktopNotificationSubtitle": "在系统右上角弹出原生通知横幅",
+    "desktopNotificationDesc": "当接收到局域网新文件或文件下载完成时，在电脑桌面（macOS / Windows）弹出原生横幅，点击可直接激活页面。",
+    "desktopNotificationUnsupported": "当前浏览器或非 HTTPS 局域网环境未开放系统通知接口，系统将自动使用页面顶部居中通知降级。",
+    "desktopNotificationDenied": "系统通知已被浏览器拒绝。请在浏览器地址栏左侧网站设置中开启「通知」权限。",
+    "desktopNotificationUnprompted": "尚未授予系统通知权限",
+    "enableDesktopNotification": "开启系统通知",
+    "desktopNotificationEnabledLabel": "启用系统桌面横幅通知",
+    "permissionGranted": "已授权",
+    "sendTestNotification": "发送测试通知",
+    "testNotificationTitle": "LightDrop · 系统通知测试",
+    "testNotificationBody": "系统通知已正常连接！局域网收到新文件或下载完成时将自动在屏幕右上角提醒您。"
   },
   "footer": {
     "onlineVisitors": "在线访问者",
@@ -472,7 +484,8 @@
     "guestVisitor": "局域网访客"
   },
   "app": {
-    "incomingToast": "接收到新共享内容: 「{{title}}」"
+    "incomingToast": "接收到新共享内容: 「{{title}}」",
+    "desktopIncomingTitle": "LightDrop · 接收到新共享内容"
   },
   "format": {
     "today": "今天",

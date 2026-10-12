@@ -12,6 +12,7 @@ import { useRecords } from './hooks/useRecords';
 import { useWebSocket } from './hooks/useWebSocket';
 import { ShareItem, WsMessage } from '@shared/types';
 import { X } from 'lucide-react';
+import { sendDesktopNotification } from './utils/desktopNotification';
 
 export const App: React.FC = () => {
   const { t } = useTranslation();
@@ -61,8 +62,15 @@ export const App: React.FC = () => {
 
   const handleDownloadSuccess = useCallback(
     (dirName: string, fileName: string) => {
-      setIncomingToast(t('downloadModal.saveSuccessToast', { dir: dirName, file: fileName }));
+      const msg = t('downloadModal.saveSuccessToast', { dir: dirName, file: fileName });
+      setIncomingToast(msg);
       setTimeout(() => setIncomingToast(null), 3500);
+
+      sendDesktopNotification({
+        title: t('downloadModal.completedTitle', '文件下载完成'),
+        body: msg,
+        tag: `lightdrop_download_${Date.now()}`,
+      });
     },
     [t]
   );
@@ -118,6 +126,12 @@ export const App: React.FC = () => {
         if (msg.payload?.title) {
           setIncomingToast(t('app.incomingToast', { title: msg.payload.title }));
           setTimeout(() => setIncomingToast(null), 3500);
+
+          sendDesktopNotification({
+            title: t('app.desktopIncomingTitle', 'LightDrop · 接收到新共享内容'),
+            body: msg.payload.title,
+            tag: `lightdrop_incoming_${msg.payload.id || Date.now()}`,
+          });
         }
       } else if (
         msg.type === 'ITEM_DELETED' ||

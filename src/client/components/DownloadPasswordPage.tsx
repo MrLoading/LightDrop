@@ -33,6 +33,7 @@ import { ImageViewerModal } from './ImageViewerModal';
 import { DownloadModal } from './DownloadModal';
 import { BatchViewerModal } from './BatchViewerModal';
 import { getUserNickname, getCharacterInfo, getDisplayNickname } from '../utils/nickname';
+import { sendDesktopNotification } from '../utils/desktopNotification';
 
 interface DownloadPasswordPageProps {
   recordId: string;
@@ -79,8 +80,15 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
 
   const handleDownloadSuccess = (dirName: string, fileName: string) => {
     setDownloadTriggered(true);
-    setDownloadSuccessToast(t('downloadModal.saveSuccessToast', { dir: dirName, file: fileName }));
+    const toastText = t('downloadModal.saveSuccessToast', { dir: dirName, file: fileName });
+    setDownloadSuccessToast(toastText);
     setTimeout(() => setDownloadSuccessToast(null), 4000);
+
+    sendDesktopNotification({
+      title: t('downloadModal.completedTitle', '文件下载完成'),
+      body: toastText,
+      tag: `lightdrop_download_${Date.now()}`,
+    });
   };
 
   // 加载单条记录信息
