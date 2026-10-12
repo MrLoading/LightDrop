@@ -86,7 +86,9 @@ class AuditService {
     if (
       clientIp === '127.0.0.1' ||
       clientIp === '::1' ||
+      clientIp === '0:0:0:0:0:0:0:1' ||
       clientIp === 'localhost' ||
+      clientIp.startsWith('127.') ||
       clientIp === ''
     ) {
       return true;
@@ -105,11 +107,19 @@ class AuditService {
    * 判断请求是否拥有管理员权限（本机设备或在配置的 adminIps 列表中）
    */
   public isAdmin(req: Request): boolean {
-    if (this.isLocalDevice(req)) {
+    const clientIp = this.getClientIp(req);
+
+    // 1. 本机设备（127.0.0.1 / localhost / ::1 / 本机物理网卡）始终拥有绝对最高管理员权限
+    if (
+      this.isLocalDevice(req) ||
+      clientIp === '127.0.0.1' ||
+      clientIp.startsWith('127.') ||
+      clientIp === '::1' ||
+      clientIp === 'localhost'
+    ) {
       return true;
     }
 
-    const clientIp = this.getClientIp(req);
     const settings = configManager.getSettings();
     const adminIps = settings.adminIps || [];
 

@@ -42,7 +42,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSettingsSaved,
 }) => {
   const { t } = useTranslation();
-  const { settings, loading, saving, saveSettings, validateDir } = useSettings();
+  const { settings, loading, saving, saveSettings, validateDir, fetchSettings } = useSettings();
 
   const [language, setLanguage] = useState<'zh-CN' | 'en-US' | 'auto'>(() => getCurrentLanguageSetting());
   const [storageDir, setStorageDir] = useState('');
@@ -64,14 +64,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   );
   const desktopNotificationSupported = isDesktopNotificationSupported();
 
-  const isAdmin = Boolean(settings.isAdmin);
+  const isAdmin = settings.isAdmin ?? true;
 
   useEffect(() => {
     if (isOpen) {
+      fetchSettings();
       setNotificationPermission(getDesktopNotificationPermission());
       setNotificationEnabled(isDesktopNotificationEnabled());
     }
-  }, [isOpen]);
+  }, [isOpen, fetchSettings]);
 
   const handleRequestPermission = async () => {
     const granted = await requestDesktopNotificationPermission();
@@ -215,40 +216,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
 
           {/* 权限状态与客户端 IP 横幅 */}
-          <div
-            className={`p-3 rounded-xl border flex items-start gap-2.5 transition ${
-              isAdmin
-                ? 'bg-emerald-50/80 border-emerald-200/80 text-emerald-900'
-                : 'bg-amber-50/80 border-amber-200/80 text-amber-900'
-            }`}
-          >
-            {isAdmin ? (
-              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-            ) : (
-              <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-            )}
-            <div className="flex-1 space-y-1">
-              <div className="flex items-center justify-between flex-wrap gap-1">
-                <span className="font-bold text-xs flex items-center gap-1.5">
-                  {isAdmin ? t('settings.adminBadge') : t('settings.guestBadge')}
-                </span>
-                <span
-                  className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-semibold ${
-                    isAdmin
-                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                      : 'bg-amber-100 text-amber-800 border border-amber-300'
-                  }`}
-                >
-                  IP: {settings.clientIp || '127.0.0.1'}
-                </span>
+          {settings.clientIp && (
+            <div
+              className={`p-3 rounded-xl border flex items-start gap-2.5 transition ${
+                isAdmin
+                  ? 'bg-emerald-50/80 border-emerald-200/80 text-emerald-900'
+                  : 'bg-amber-50/80 border-amber-200/80 text-amber-900'
+              }`}
+            >
+              {isAdmin ? (
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              ) : (
+                <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              )}
+              <div className="flex-1 space-y-1">
+                <div className="flex items-center justify-between flex-wrap gap-1">
+                  <span className="font-bold text-xs flex items-center gap-1.5">
+                    {isAdmin ? t('settings.adminBadge') : t('settings.guestBadge')}
+                  </span>
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-semibold ${
+                      isAdmin
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        : 'bg-amber-100 text-amber-800 border border-amber-300'
+                    }`}
+                  >
+                    IP: {settings.clientIp}
+                  </span>
+                </div>
+                <p className="text-[11px] leading-relaxed opacity-90">
+                  {isAdmin
+                    ? t('settings.adminBadgeDesc', { ip: settings.clientIp })
+                    : t('settings.guestBadgeDesc', { ip: settings.clientIp })}
+                </p>
               </div>
-              <p className="text-[11px] leading-relaxed opacity-90">
-                {isAdmin
-                  ? t('settings.adminBadgeDesc', { ip: settings.clientIp || '127.0.0.1' })
-                  : t('settings.guestBadgeDesc', { ip: settings.clientIp || '127.0.0.1' })}
-              </p>
             </div>
-          </div>
+          )}
 
           {/* 界面语言配置 (本地生效) */}
           <div className="bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80 space-y-2">

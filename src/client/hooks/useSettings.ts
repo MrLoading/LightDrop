@@ -52,7 +52,10 @@ export function useSettings() {
       if (!json.success) {
         throw new Error(json.error || i18n.t('settings.saveFailed'));
       }
-      setSettings(json.data);
+      setSettings((prev) => ({
+        ...prev,
+        ...json.data,
+      }));
       return json.data;
     } catch (err: any) {
       setError(err?.message || i18n.t('settings.saveFailed'));

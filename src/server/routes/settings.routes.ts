@@ -134,9 +134,30 @@ settingsRouter.post('/', (req: Request, res: Response) => {
     adminIps: updatedAdminIps,
   });
 
+  const clientIp = auditService.getClientIp(req);
+  const isAdmin = auditService.isAdmin(req);
+  const configFilePath = configManager.getConfigFilePath();
+
+  let isWritable = false;
+  let diskSizeBytes = 0;
+  try {
+    fs.accessSync(updated.storageDir, fs.constants.W_OK | fs.constants.R_OK);
+    isWritable = true;
+    diskSizeBytes = storageService.getDirectorySize(updated.storageDir);
+  } catch {
+    isWritable = false;
+  }
+
   res.json({
     success: true,
-    data: updated,
+    data: {
+      ...updated,
+      isAdmin,
+      clientIp,
+      configFilePath,
+      isWritable,
+      storageSizeBytes: diskSizeBytes,
+    },
     message: '设置已成功保存并立即生效',
   });
 });
