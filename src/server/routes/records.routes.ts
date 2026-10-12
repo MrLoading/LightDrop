@@ -63,7 +63,7 @@ function sanitizeRecord(item: ShareItem, options?: { hidePassword?: boolean }): 
   }
 
   if (safe.hasPassword) {
-    if (safe.type === 'text') {
+    if (safe.content) {
       safe.content = undefined;
       safe.preview = '🔒 此内容已受访问密码保护，验证后可查看与复制';
     }
@@ -242,9 +242,10 @@ recordsRouter.post(
     const hasPwd = Boolean(password && typeof password === 'string' && password.trim());
     const pwdHash = hasPwd ? hashPassword(password) : undefined;
     const senderNickname = auditService.getClientNickname(req);
+    const contentStr = req.body.content ? String(req.body.content).trim() : '';
 
-    // 1. 如果单次上传多个文件，聚合为单个“批量文件合辑”条目，统一管理、呈现、查看与下载
-    if (files.length > 1) {
+    // 1. 如果上传多个文件，或者携带正文说明（多文件合辑 / 图文附件条目），统一管理、呈现、查看与下载
+    if (files.length > 1 || (files.length >= 1 && contentStr)) {
       const id = nanoid(10);
       const recordDir = storageService.getRecordStoragePath(id);
       fs.mkdirSync(recordDir, { recursive: true });
@@ -287,9 +288,24 @@ recordsRouter.post(
 
       const allImages = subFiles.every((sf) => sf.isImage);
       const customTitle = req.body.title ? fixFileName(req.body.title).trim() : '';
-      const defaultTitle = allImages
-        ? `${subFiles[0].name} 等 ${subFiles.length} 张图片`
-        : `${subFiles[0].name} 等 ${subFiles.length} 个文件`;
+      let defaultTitle = '';
+      if (contentStr) {
+        const firstLine = contentStr.split('\n')[0].replace(/^[#\s*-_>]+/, '').trim();
+        const summary = firstLine.length > 25 ? `${firstLine.substring(0, 25)}...` : firstLine;
+        defaultTitle = summary
+          ? `${summary} (含${subFiles.length}个附件)`
+          : allImages
+          ? `${subFiles[0].name} 等 ${subFiles.length} 张图片`
+          : `${subFiles[0].name} 等 ${subFiles.length} 个文件`;
+      } else {
+        defaultTitle = allImages
+          ? subFiles.length === 1
+            ? subFiles[0].name
+            : `${subFiles[0].name} 等 ${subFiles.length} 张图片`
+          : subFiles.length === 1
+          ? subFiles[0].name
+          : `${subFiles[0].name} 等 ${subFiles.length} 个文件`;
+      }
       const title = customTitle || defaultTitle;
       const now = new Date().toISOString();
 
@@ -297,6 +313,8 @@ recordsRouter.post(
         id,
         type: 'batch',
         title,
+        content: contentStr || undefined,
+        preview: contentStr ? (contentStr.length > 120 ? `${contentStr.substring(0, 120)}...` : contentStr) : undefined,
         fileName: title,
         fileCount: subFiles.length,
         fileSize: totalBytes,
@@ -317,7 +335,7 @@ recordsRouter.post(
       auditService.log(
         req,
         'upload_batch',
-        allImages ? '上传图片合辑' : '上传文件合辑',
+        contentStr ? '发送图文附件' : allImages ? '上传图片合辑' : '上传文件合辑',
         newItem.title,
         newItem.id
       );
@@ -407,6 +425,7 @@ recordsRouter.post(
     const hasPwd = Boolean(password && typeof password === 'string' && password.trim());
     const pwdHash = hasPwd ? hashPassword(password) : undefined;
     const senderNickname = auditService.getClientNickname(req);
+    const contentStr = req.body.content ? String(req.body.content).trim() : '';
 
     const folderName = req.body.folderName ? fixFileName(req.body.folderName) : '上传文件夹';
     let paths: string[] = [];
@@ -447,6 +466,8 @@ recordsRouter.post(
       id,
       type: 'folder',
       title: folderName,
+      content: contentStr || undefined,
+      preview: contentStr ? (contentStr.length > 120 ? `${contentStr.substring(0, 120)}...` : contentStr) : undefined,
       fileName: folderName,
       fileSize: totalBytes,
       fileCount: files.length,

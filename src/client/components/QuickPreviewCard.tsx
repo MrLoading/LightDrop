@@ -92,6 +92,13 @@ export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
       );
     }
     if (item.type === 'batch') {
+      if (item.content) {
+        return (
+          <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+            <FileText className="w-4 h-4" />
+          </div>
+        );
+      }
       if (item.isImageBatch) {
         return (
           <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
@@ -339,7 +346,9 @@ export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
                         )}
                         {item.type === 'batch' && (
                           <span>
-                            {formatBytes(item.fileSize)} · {item.isImageBatch ? t('records.typeImageBatch', '图片合辑') : t('records.typeBatch', '文件合辑')} ({item.files?.length || 0})
+                            {item.content
+                              ? `${formatBytes(item.fileSize)} · ${t('records.typeWithAttachments', '图文附件')} (${item.files?.length || 0})`
+                              : `${formatBytes(item.fileSize)} · ${item.isImageBatch ? t('records.typeImageBatch', '图片合辑') : t('records.typeBatch', '文件合辑')} (${item.files?.length || 0})`}
                           </span>
                         )}
                       </div>

@@ -74,7 +74,7 @@
     "toastSentProtected": "Sent (password protected)",
     "toastUploadSuccess": "Successfully uploaded {{count}} file(s){{extra}}",
     "toastUploadFolderSuccess": "Successfully uploaded and archived folder ({{count}} files){{extra}}",
-    "toastSendAndUploadSuccess": "Text and {{count}} file(s) processed successfully{{extra}}",
+    "toastSendAndUploadSuccess": "Successfully sent note with {{count}} attachment(s){{extra}}",
     "toastAddedToPending": "Added {{count}} file(s) to pending list",
     "toastAddedFolderToPending": "Added folder \"{{name}}\" to pending list",
     "toastAddedMixedToPending": "Added {{count}} item(s) to pending list",
@@ -82,6 +82,7 @@
     "toastCancelUpload": "Upload was cancelled by user",
     "toastEncrypted": " (Encrypted)",
     "uploadingFilesCount": "Uploading {{count}} file(s)...",
+    "uploadingMerged": "Sending note and attachments...",
     "parsingDrop": "Parsing dragged items...",
     "sourceClipboard": "Clipboard",
     "sourceDrop": "Drag & Drop",
@@ -171,9 +172,12 @@
     "typeFile": "File",
     "typeBatch": "File Collection",
     "typeImageBatch": "Photo Album",
+    "typeWithAttachments": "Post with Attachments",
     "clickToViewBatchImages": "Click to view photo album",
     "clickToViewBatchFiles": "Click to view file collection",
     "batchCountSummary": "{{count}} files, {{size}}",
+    "batchWithContentSummary": "{{chars}} chars · {{count}} attachment(s)",
+    "fileUnit": "files",
     "galleryView": "Gallery View",
     "listView": "List View",
     "fileListTitle": "Collection Files",
@@ -542,6 +546,13 @@
     "macSystemFilesTip": "Note: Due to macOS and Chromium security restrictions, selecting the root \"Downloads\" or \"Desktop\" folder directly is blocked by browser (\"contains system files\"). To save inside Downloads, create a new subfolder and select it; or simply use \"System Default\".",
     "switchToDefaultBtn": "Use System Default Downloads",
     "systemFolderBlockedNotice": "Restricted system directory detected. Please select a subfolder instead, or switch to System Default."
+  },
+  "batchViewer": {
+    "textContent": "Message / Note",
+    "exportMd": "Export .md",
+    "attachmentsTitle": "Attachments",
+    "expandContent": "Expand Full Content",
+    "collapseContent": "Collapse Content"
   }
 }
 

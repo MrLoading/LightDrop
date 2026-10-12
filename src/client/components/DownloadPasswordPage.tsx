@@ -156,7 +156,10 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
       if (record?.type === 'text') {
         setUnlockedContent(json.content || '');
       } else if (record?.type === 'batch') {
-        // 解锁后进入 BatchViewerModal
+        // 解锁后进入 BatchViewerModal 并同步解密正文
+        if (json.content) {
+          setUnlockedContent(json.content);
+        }
       } else if (isImageItem(record) && isViewMode) {
         setShowImageViewerModal(true);
       } else {
@@ -320,12 +323,12 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
       <BatchViewerModal
         isOpen={true}
         onClose={handleGoHome}
-        item={record}
+        item={unlockedContent ? { ...record, content: unlockedContent } : record}
         password={password}
         verifyPassword={async (_id: string, pwd: string) => {
           const ok = await doVerifyPassword(pwd);
           if (!ok) throw new Error('密码错误');
-          return pwd;
+          return unlockedContent || pwd;
         }}
       />
     );

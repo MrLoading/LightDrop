@@ -48,20 +48,23 @@ interface SendCardProps {
     files: FileList | File[],
     password?: string,
     onProgress?: (info: UploadProgressInfo) => void,
-    setAbortHandle?: (abortFn: () => void) => void
+    setAbortHandle?: (abortFn: () => void) => void,
+    content?: string
   ) => Promise<any>;
   onUploadFolder: (
     files: FileList,
     password?: string,
     onProgress?: (info: UploadProgressInfo) => void,
-    setAbortHandle?: (abortFn: () => void) => void
+    setAbortHandle?: (abortFn: () => void) => void,
+    content?: string
   ) => Promise<any>;
   onUploadMixedBatch: (
     individualFiles: File[],
     folders: ProcessedFolder[],
     password?: string,
     onProgress?: (info: UploadProgressInfo) => void,
-    setAbortHandle?: (abortFn: () => void) => void
+    setAbortHandle?: (abortFn: () => void) => void,
+    content?: string
   ) => Promise<{ uploadedFilesCount: number; uploadedFoldersCount: number }>;
 }
 
@@ -256,10 +259,16 @@ export const SendCard: React.FC<SendCardProps> = ({
     try {
       setSubmitting(true);
 
-      // 1. 若存在待上传的文件或文件夹，执行上传
+      // 1. 若存在待上传的文件或文件夹，执行上传 (若同时输入了文字则作为正文合并上传)
       if (hasPending) {
         setUploadProgress({ percent: 0, loaded: 0, total: 0 });
-        setSubmittingStatus(t('send.uploadingFilesCount', { count: totalPendingItemsCount }));
+        setSubmittingStatus(
+          hasText
+            ? t('send.uploadingMerged', '正在合并发送正文与附件...')
+            : t('send.uploadingFilesCount', { count: totalPendingItemsCount })
+        );
+
+        const textContent = hasText ? text.trim() : undefined;
 
         if (pendingFolders.length > 0) {
           await onUploadMixedBatch(
@@ -269,7 +278,8 @@ export const SendCard: React.FC<SendCardProps> = ({
             (info) => setUploadProgress(info),
             (abortFn) => {
               abortRef.current = abortFn;
-            }
+            },
+            textContent
           );
         } else {
           await onUploadFiles(
@@ -278,7 +288,8 @@ export const SendCard: React.FC<SendCardProps> = ({
             (info) => setUploadProgress(info),
             (abortFn) => {
               abortRef.current = abortFn;
-            }
+            },
+            textContent
           );
         }
 
@@ -288,10 +299,11 @@ export const SendCard: React.FC<SendCardProps> = ({
         });
         setPendingFiles([]);
         setPendingFolders([]);
-      }
-
-      // 2. 若同时输入了文字，执行发送文本记录
-      if (hasText) {
+        if (hasText) {
+          setText('');
+        }
+      } else if (hasText) {
+        // 2. 仅输入了文字，执行普通纯文本发送
         setSubmittingStatus(t('send.processing'));
         await onSendText(text.trim(), undefined, currentPwd);
         setText('');

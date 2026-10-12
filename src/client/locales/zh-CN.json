@@ -74,7 +74,7 @@
     "toastSentProtected": "已发送（已设访问密码保护）",
     "toastUploadSuccess": "成功上传 {{count}} 个文件{{extra}}",
     "toastUploadFolderSuccess": "成功上传并归档文件夹 (共 {{count}} 个文件){{extra}}",
-    "toastSendAndUploadSuccess": "文本记录与 {{count}} 个文件已成功处理{{extra}}",
+    "toastSendAndUploadSuccess": "已成功合并发送正文与 {{count}} 个附件{{extra}}",
     "toastAddedToPending": "已添加 {{count}} 个文件至待上传列表",
     "toastAddedFolderToPending": "已添加文件夹「{{name}}」至待上传列表",
     "toastAddedMixedToPending": "已添加 {{count}} 项至待上传列表",
@@ -82,6 +82,7 @@
     "toastCancelUpload": "上传已由用户取消",
     "toastEncrypted": "（已加密）",
     "uploadingFilesCount": "正在上传 {{count}} 个文件...",
+    "uploadingMerged": "正在合并发送正文与附件...",
     "parsingDrop": "正在解析拖拽内容...",
     "sourceClipboard": "剪贴板",
     "sourceDrop": "拖拽",
@@ -171,9 +172,12 @@
     "typeFile": "文件",
     "typeBatch": "文件合辑",
     "typeImageBatch": "图片合辑",
+    "typeWithAttachments": "图文附件",
     "clickToViewBatchImages": "点击浏览图片合辑",
     "clickToViewBatchFiles": "点击浏览文件合辑",
     "batchCountSummary": "共 {{count}} 个文件，{{size}}",
+    "batchWithContentSummary": "正文 {{chars}} 字 · 包含 {{count}} 个附件",
+    "fileUnit": "个文件",
     "galleryView": "画廊模式",
     "listView": "列表模式",
     "fileListTitle": "合辑文件列表",
@@ -542,6 +546,13 @@
     "macSystemFilesTip": "提示：受 macOS 与 Chromium 安全策略限制，系统禁止直接授权根「下载」或「桌面」目录（会提示含有系统文件）。如需在下载目录中保存，请在其中【新建子文件夹】再选取；或者直接选择【系统默认下载目录】。",
     "switchToDefaultBtn": "一键使用系统默认下载目录",
     "systemFolderBlockedNotice": "检测到受限系统目录。建议新建子文件夹后再选取，或直接切换为系统默认下载。"
+  },
+  "batchViewer": {
+    "textContent": "正文说明",
+    "exportMd": "导出 .md",
+    "attachmentsTitle": "附件列表",
+    "expandContent": "展开完整内容",
+    "collapseContent": "收起完整内容"
   }
 }
 

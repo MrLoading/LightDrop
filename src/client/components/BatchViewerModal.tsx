@@ -18,7 +18,12 @@ import {
   Sparkles,
   ExternalLink,
   Loader2,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Paperclip,
 } from 'lucide-react';
+import { marked } from 'marked';
 import { useTranslation } from 'react-i18next';
 import { ShareItem, BatchFileItem } from '@shared/types';
 import { formatBytes, formatDisplayTime, getFileTypeLabel, isImageItem } from '../utils/format';
@@ -54,6 +59,11 @@ export const BatchViewerModal: React.FC<BatchViewerModalProps> = ({
   const [selectedImage, setSelectedImage] = useState<ShareItem | null>(null);
   const [qrModalOpen, setQrModalOpen] = useState(false);
 
+  // 正文说明展示状态与截断展开控制
+  const [unlockedContent, setUnlockedContent] = useState<string | null>(null);
+  const [isContentExpanded, setIsContentExpanded] = useState(false);
+  const [copiedText, setCopiedText] = useState(false);
+
   // 密码校验相关状态
   const [unlocked, setUnlocked] = useState(false);
   const [inputPassword, setInputPassword] = useState(password || '');
@@ -61,6 +71,54 @@ export const BatchViewerModal: React.FC<BatchViewerModalProps> = ({
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
   const effectivePassword = password || item?.password || (unlocked ? inputPassword : '');
+
+  // 获取有效正文说明内容 (包含密码解锁后解密的内容)
+  const displayContent = unlockedContent || item?.content || '';
+
+  // 超过 250 字符或多于 5 行时进行默认折叠截断
+  const isContentLong = useMemo(() => {
+    if (!displayContent) return false;
+    return displayContent.length > 250 || (displayContent.match(/\n/g) || []).length > 5;
+  }, [displayContent]);
+
+  // Markdown 渲染 HTML (支持 GFM 语法与自动换行)
+  const markdownHtml = useMemo(() => {
+    if (!displayContent) return '';
+    try {
+      marked.setOptions({
+        gfm: true,
+        breaks: true,
+      });
+      return marked.parse(displayContent) as string;
+    } catch (err) {
+      return `<pre class="whitespace-pre-wrap font-mono text-xs">${displayContent}</pre>`;
+    }
+  }, [displayContent]);
+
+  // 复制正文内容
+  const handleCopyText = async () => {
+    if (!displayContent) return;
+    const ok = await copyToClipboard(displayContent);
+    if (ok) {
+      setCopiedText(true);
+      setTimeout(() => setCopiedText(false), 2000);
+    }
+  };
+
+  // 导出 Markdown 文件
+  const handleDownloadMarkdown = () => {
+    if (!displayContent) return;
+    const blob = new Blob([displayContent], { type: 'text/markdown;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const fileName = `${(item?.title || '文档').replace(/[\\/:*?"<>|]/g, '_')}.md`;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  };
 
   // 获取子文件列表
   const subFiles: BatchFileItem[] = useMemo(() => {
@@ -186,7 +244,10 @@ export const BatchViewerModal: React.FC<BatchViewerModalProps> = ({
     try {
       setVerifying(true);
       setVerifyError(null);
-      await verifyPassword(item.id, inputPassword.trim());
+      const decrypted = await verifyPassword(item.id, inputPassword.trim());
+      if (decrypted) {
+        setUnlockedContent(decrypted);
+      }
       setUnlocked(true);
     } catch (err: any) {
       setVerifyError(err?.message || t('passwordModal.incorrectError', '密码错误，请重新输入'));
@@ -211,10 +272,20 @@ export const BatchViewerModal: React.FC<BatchViewerModalProps> = ({
             <div className="flex items-center gap-3 min-w-0">
               <div
                 className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${
-                  isAllImages ? 'bg-purple-100/80 text-purple-600' : 'bg-indigo-100/80 text-indigo-600'
+                  displayContent
+                    ? 'bg-blue-100/80 text-blue-600'
+                    : isAllImages
+                    ? 'bg-purple-100/80 text-purple-600'
+                    : 'bg-indigo-100/80 text-indigo-600'
                 }`}
               >
-                {isAllImages ? <Images className="w-5 h-5" /> : <Layers className="w-5 h-5" />}
+                {displayContent ? (
+                  <FileText className="w-5 h-5" />
+                ) : isAllImages ? (
+                  <Images className="w-5 h-5" />
+                ) : (
+                  <Layers className="w-5 h-5" />
+                )}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -223,12 +294,18 @@ export const BatchViewerModal: React.FC<BatchViewerModalProps> = ({
                   </h3>
                   <span
                     className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
-                      isAllImages
+                      displayContent
+                        ? 'bg-blue-50 text-blue-700 border-blue-200/80'
+                        : isAllImages
                         ? 'bg-purple-50 text-purple-700 border-purple-200/80'
                         : 'bg-indigo-50 text-indigo-700 border-indigo-200/80'
                     }`}
                   >
-                    {isAllImages ? t('records.typeImageBatch', '图片合辑') : t('records.typeBatch', '文件合辑')}
+                    {displayContent
+                      ? t('records.typeWithAttachments', '图文附件')
+                      : isAllImages
+                      ? t('records.typeImageBatch', '图片合辑')
+                      : t('records.typeBatch', '文件合辑')}
                   </span>
                   {item.hasPassword && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200/80">
@@ -374,7 +451,109 @@ export const BatchViewerModal: React.FC<BatchViewerModalProps> = ({
                 </div>
                 {verifyError && <p className="text-xs text-rose-600 font-medium mt-2">{verifyError}</p>}
               </div>
-            ) : hasImages && activeViewTab === 'gallery' ? (
+            ) : (
+              <>
+                {/* 1. 若存在正文说明，顶部优先渲染 Markdown 格式正文 (支持长文本截断与展开/折叠) */}
+                {displayContent && (
+                  <div className="mb-5 bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden transition-all">
+                    {/* 正文说明顶部操作栏 */}
+                    <div className="px-4 py-2.5 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 font-semibold text-slate-700">
+                        <FileText className="w-4 h-4 text-blue-600 shrink-0" />
+                        <span>{t('batchViewer.textContent', '正文说明')}</span>
+                        <span className="text-[11px] font-normal text-slate-400 font-mono">
+                          ({displayContent.length} {t('markdownModal.chars', '字')})
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={handleCopyText}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs transition active:scale-95"
+                          title={t('markdownModal.copy', '复制正文')}
+                        >
+                          {copiedText ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-500 shrink-0" />
+                              <span className="text-emerald-600 font-semibold">{t('markdownModal.copied', '已复制')}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span>{t('markdownModal.copy', '复制正文')}</span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDownloadMarkdown}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs transition active:scale-95"
+                          title={t('markdownModal.downloadMd', '下载为 .md')}
+                        >
+                          <Download className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span>{t('batchViewer.exportMd', '导出 .md')}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Markdown 正文内容 */}
+                    <div className="relative p-4 sm:p-5">
+                      <div
+                        className={`markdown-content max-w-none text-slate-800 leading-relaxed text-sm selection:bg-blue-100 transition-all ${
+                          !isContentExpanded && isContentLong ? 'max-h-[160px] overflow-hidden' : ''
+                        }`}
+                        dangerouslySetInnerHTML={{ __html: markdownHtml }}
+                      />
+
+                      {/* 截断渐变与展开/折叠按钮 */}
+                      {isContentLong && (
+                        <div
+                          className={`${
+                            !isContentExpanded
+                              ? 'absolute inset-x-0 bottom-0 pt-12 pb-2 bg-gradient-to-t from-white via-white/95 to-transparent flex justify-center'
+                              : 'pt-3 flex justify-center border-t border-slate-100/80 mt-3'
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setIsContentExpanded(!isContentExpanded)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200/80 shadow-2xs transition active:scale-95 cursor-pointer"
+                          >
+                            {isContentExpanded ? (
+                              <>
+                                <ChevronUp className="w-3.5 h-3.5 shrink-0" />
+                                <span>{t('batchViewer.collapseContent', '收起完整内容')}</span>
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="w-3.5 h-3.5 shrink-0" />
+                                <span>{t('batchViewer.expandContent', '展开完整内容')}</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. 附件列表区域 (如果存在正文说明，显示清晰的附件标头) */}
+                {displayContent && (
+                  <div className="flex items-center justify-between pb-3 pt-1">
+                    <div className="flex items-center gap-2">
+                      <Paperclip className="w-4 h-4 text-indigo-600 shrink-0" />
+                      <h4 className="text-xs font-bold text-slate-700 tracking-tight">
+                        {t('batchViewer.attachmentsTitle', '附件列表')}
+                      </h4>
+                      <span className="text-[11px] font-mono text-slate-400">
+                        ({subFiles.length} {t('records.fileUnit', '个文件')} · {formatBytes(item.fileSize)})
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* 附件展示：画廊模式 / 列表模式 */}
+                {hasImages && activeViewTab === 'gallery' ? (
               /* 画廊模式：图片响应式网格瀑布流呈现，悬浮操作与点击大图预览 */
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
                 {subFiles.map((subFile) => {
@@ -561,6 +740,8 @@ export const BatchViewerModal: React.FC<BatchViewerModalProps> = ({
                 })}
               </div>
             )}
+          </>
+        )}
           </div>
 
           {/* 模态框底部 Footer */}

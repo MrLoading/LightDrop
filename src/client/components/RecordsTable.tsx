@@ -562,6 +562,13 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
       );
     }
     if (item.type === 'batch') {
+      if (item.content) {
+        return (
+          <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+            <FileText className="w-4 h-4" />
+          </div>
+        );
+      }
       if (item.isImageBatch) {
         return (
           <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
@@ -916,7 +923,9 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                             : item.type === 'folder'
                             ? t('records.typeFolder')
                             : item.type === 'batch'
-                            ? item.isImageBatch
+                            ? item.content
+                              ? t('records.typeWithAttachments', '图文附件')
+                              : item.isImageBatch
                               ? t('records.typeImageBatch', '图片合辑')
                               : t('records.typeBatch', '文件合辑')
                             : t('records.typeFile')}
@@ -970,10 +979,15 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                               : item.type === 'folder'
                               ? t('preview.folderWithCount', { count: item.fileCount || 0 })
                               : item.type === 'batch'
-                              ? t('records.batchCountSummary', '共 {{count}} 个文件，{{size}}', {
-                                  count: item.files?.length || 0,
-                                  size: formatBytes(item.fileSize),
-                                })
+                              ? item.content
+                                ? t('records.batchWithContentSummary', '正文 {{chars}} 字 · 包含 {{count}} 个附件', {
+                                    chars: item.content.length,
+                                    count: item.files?.length || item.fileCount || 0,
+                                  })
+                                : t('records.batchCountSummary', '共 {{count}} 个文件，{{size}}', {
+                                    count: item.files?.length || 0,
+                                    size: formatBytes(item.fileSize),
+                                  })
                               : item.type === 'image'
                               ? t('records.imageFile')
                               : getFileTypeLabel(item.fileName, item.extension, item.mimeType)}

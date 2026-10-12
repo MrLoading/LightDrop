@@ -82,12 +82,13 @@ export function useRecords() {
     return json.data as ShareItem;
   };
 
-  // 上传单个或多个文件 (带实时进度与取消支持)
+  // 上传单个或多个文件 (带实时进度与取消支持，支持同时携带 Markdown 正文合并上传)
   const uploadFiles = async (
     files: FileList | File[],
     password?: string,
     onProgress?: (info: UploadProgressInfo) => void,
-    setAbortHandle?: (abortFn: () => void) => void
+    setAbortHandle?: (abortFn: () => void) => void,
+    content?: string
   ) => {
     const formData = new FormData();
     for (let i = 0; i < files.length; i++) {
@@ -95,6 +96,9 @@ export function useRecords() {
     }
     if (password) {
       formData.append('password', password);
+    }
+    if (content && content.trim()) {
+      formData.append('content', content.trim());
     }
     formData.append('nickname', getUserNickname());
 
@@ -113,12 +117,13 @@ export function useRecords() {
     }
   };
 
-  // 上传文件夹 (支持 input FileList 与可选密码)
+  // 上传文件夹 (支持 input FileList 与可选密码，支持同时携带说明文本)
   const uploadFolder = async (
     files: FileList,
     password?: string,
     onProgress?: (info: UploadProgressInfo) => void,
-    setAbortHandle?: (abortFn: () => void) => void
+    setAbortHandle?: (abortFn: () => void) => void,
+    content?: string
   ) => {
     const fileArray: File[] = [];
     const relativePaths: string[] = [];
@@ -137,7 +142,7 @@ export function useRecords() {
       relativePaths.push(files[i].webkitRelativePath || files[i].name);
     }
 
-    return uploadRawFolder(folderName, fileArray, relativePaths, password, onProgress, setAbortHandle);
+    return uploadRawFolder(folderName, fileArray, relativePaths, password, onProgress, setAbortHandle, content);
   };
 
   // 上传指定名称与相对路径结构的文件夹 (带实时进度与取消支持)
@@ -147,7 +152,8 @@ export function useRecords() {
     paths: string[],
     password?: string,
     onProgress?: (info: UploadProgressInfo) => void,
-    setAbortHandle?: (abortFn: () => void) => void
+    setAbortHandle?: (abortFn: () => void) => void,
+    content?: string
   ) => {
     const formData = new FormData();
     for (let i = 0; i < files.length; i++) {
@@ -157,6 +163,9 @@ export function useRecords() {
     formData.append('paths', JSON.stringify(paths));
     if (password) {
       formData.append('password', password);
+    }
+    if (content && content.trim()) {
+      formData.append('content', content.trim());
     }
     formData.append('nickname', getUserNickname());
 
@@ -185,7 +194,8 @@ export function useRecords() {
     folders: Array<{ name: string; files: File[]; paths: string[] }>,
     password?: string,
     onProgress?: (info: UploadProgressInfo) => void,
-    setAbortHandle?: (abortFn: () => void) => void
+    setAbortHandle?: (abortFn: () => void) => void,
+    content?: string
   ) => {
     let uploadedFilesCount = 0;
     let uploadedFoldersCount = 0;
@@ -197,7 +207,7 @@ export function useRecords() {
       });
     }
 
-    // 上传独立文件
+    // 上传独立文件 (若有正文，附加到独立文件上传中)
     if (individualFiles.length > 0) {
       await uploadFiles(
         individualFiles,
@@ -205,13 +215,16 @@ export function useRecords() {
         onProgress,
         (abort) => {
           currentAbort = abort;
-        }
+        },
+        content
       );
       uploadedFilesCount += individualFiles.length;
     }
 
-    // 上传每个文件夹
-    for (const folder of folders) {
+    // 上传每个文件夹 (若无独立文件且有正文，附加到首个文件夹中)
+    for (let idx = 0; idx < folders.length; idx++) {
+      const folder = folders[idx];
+      const folderContent = individualFiles.length === 0 && idx === 0 ? content : undefined;
       await uploadRawFolder(
         folder.name,
         folder.files,
@@ -220,7 +233,8 @@ export function useRecords() {
         onProgress,
         (abort) => {
           currentAbort = abort;
-        }
+        },
+        folderContent
       );
       uploadedFoldersCount++;
     }
@@ -381,6 +395,8 @@ export function useRecords() {
         // 图片合辑在图片标签页下也展示
       } else if (activeTab === 'file' && item.type === 'batch') {
         // 文件合辑在文件标签页下展示
+      } else if (activeTab === 'text' && item.type === 'batch' && item.content) {
+        // 带有文本内容的图文附件合辑在文本标签页下也展示
       } else if (item.type !== activeTab) {
         return false;
       }
