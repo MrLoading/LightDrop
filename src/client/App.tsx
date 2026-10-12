@@ -157,7 +157,7 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      <div className="max-w-6xl mx-auto w-full">
+      <div className="max-w-[1440px] 2xl:max-w-[1560px] mx-auto w-full">
         {/* 顶部 Header */}
         <Header
           accessUrl={accessUrl}

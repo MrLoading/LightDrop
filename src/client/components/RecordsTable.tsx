@@ -20,6 +20,9 @@ import {
   QrCode,
   Eye,
   Maximize2,
+  ChevronDown,
+  Layers,
+  Images,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ShareItem, ShareItemType, SystemStats } from '@shared/types';
@@ -33,6 +36,7 @@ import { TextMarkdownModal } from './TextMarkdownModal';
 import { ShareInfoModal } from './ShareInfoModal';
 import { ClearRecordsModal, ClearRecordsOptions } from './ClearRecordsModal';
 import { ImageViewerModal } from './ImageViewerModal';
+import { BatchViewerModal } from './BatchViewerModal';
 import { getCharacterInfo, getDisplayNickname } from '../utils/nickname';
 
 interface RecordsTableProps {
@@ -80,25 +84,46 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
   const [markdownModalItem, setMarkdownModalItem] = useState<ShareItem | null>(null);
   const [auditModalOpen, setAuditModalOpen] = useState(false);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
-  const [fileQrData, setFileQrData] = useState<{ item: ShareItem; downloadUrl: string } | null>(null);
+  const [copiedDownloadId, setCopiedDownloadId] = useState<string | null>(null);
+  const [copiedViewId, setCopiedViewId] = useState<string | null>(null);
+  const [activeDropdown, setActiveDropdown] = useState<{ id: string; type: 'copy' | 'qr' } | null>(null);
+  const [fileQrData, setFileQrData] = useState<{ item: ShareItem; downloadUrl: string; mode?: 'download' | 'view' } | null>(null);
   const [shareModalItem, setShareModalItem] = useState<ShareItem | null>(null);
   const [clearRecordsModalOpen, setClearRecordsModalOpen] = useState(false);
+  const [batchViewerItem, setBatchViewerItem] = useState<{ item: ShareItem; password?: string } | null>(null);
+  const [batchDownloading, setBatchDownloading] = useState(false);
 
-  // 获取文件或记录的下载/直链 URL (采用顶部选中的当前默认 IP)
+  // 获取文件直接下载直链 (直接向 download 接口请求)
   const getItemDirectUrl = (item: ShareItem): string => {
     const origin = (currentAccessUrl || window.location.origin).replace(/\/+$/, '');
+    const baseUrl = `${origin}/api/records/${item.id}/download`;
+    if (item.hasPassword && item.password) {
+      return `${baseUrl}?password=${encodeURIComponent(item.password)}`;
+    }
+    return baseUrl;
+  };
+
+  // 获取分享提取页面直链 (若有密码则优先指向提取页面)
+  const getItemShareUrl = (item: ShareItem): string => {
+    const origin = (currentAccessUrl || window.location.origin).replace(/\/+$/, '');
+    if (item.hasPassword) {
+      const baseUrl = `${origin}/download/${item.id}`;
+      return item.password ? `${baseUrl}?pwd=${encodeURIComponent(item.password)}` : baseUrl;
+    }
     return `${origin}/api/records/${item.id}/download`;
   };
 
-  // 获取分享页面直链 (若有密码则优先指向提取页面)
-  const getItemShareUrl = (item: ShareItem): string => {
+  // 获取查看详情页面直链 (打开照片查看详情/文本阅读/文件信息)
+  const getItemViewUrl = (item: ShareItem): string => {
     const origin = (currentAccessUrl || window.location.origin).replace(/\/+$/, '');
-    return item.hasPassword ? `${origin}/download/${item.id}` : `${origin}/api/records/${item.id}/download`;
+    const baseUrl = `${origin}/view/${item.id}`;
+    return item.hasPassword && item.password ? `${baseUrl}?pwd=${encodeURIComponent(item.password)}` : baseUrl;
   };
 
-  // 复制下载链接 (若存在密码，展开小弹窗展示详情)
+  // 复制下载链接 (若存在密码且无明文密码，展开小弹窗展示详情)
   const handleCopyDownloadLink = async (item: ShareItem) => {
-    if (item.hasPassword) {
+    setActiveDropdown(null);
+    if (item.hasPassword && !item.password) {
       setShareModalItem(item);
       return;
     }
@@ -106,8 +131,28 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
     const link = getItemDirectUrl(item);
     const ok = await copyToClipboard(link);
     if (ok) {
+      setCopiedDownloadId(item.id);
       setCopiedLinkId(item.id);
-      setTimeout(() => setCopiedLinkId(null), 2000);
+      setTimeout(() => {
+        setCopiedDownloadId(null);
+        setCopiedLinkId(null);
+      }, 2000);
+      onCopyShareLink?.(item.id);
+    }
+  };
+
+  // 复制查看链接 (打开详情/图二大图/文本阅读界面)
+  const handleCopyViewLink = async (item: ShareItem) => {
+    setActiveDropdown(null);
+    const link = getItemViewUrl(item);
+    const ok = await copyToClipboard(link);
+    if (ok) {
+      setCopiedViewId(item.id);
+      setCopiedLinkId(item.id);
+      setTimeout(() => {
+        setCopiedViewId(null);
+        setCopiedLinkId(null);
+      }, 2000);
       onCopyShareLink?.(item.id);
     }
   };
@@ -120,12 +165,14 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
     return oneLine.length > 15 ? `${oneLine.substring(0, 15)}...` : oneLine;
   };
 
-  // 打开下载二维码弹窗 (若有密码指向提取页面)
-  const handleOpenItemQr = (item: ShareItem) => {
-    const link = getItemShareUrl(item);
+  // 打开二维码弹窗 (支持下载模式与查看模式)
+  const handleOpenItemQr = (item: ShareItem, mode: 'download' | 'view' = 'download') => {
+    setActiveDropdown(null);
+    const link = mode === 'view' ? getItemViewUrl(item) : getItemShareUrl(item);
     setFileQrData({
       item,
       downloadUrl: link,
+      mode,
     });
   };
 
@@ -182,7 +229,7 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
   const [pwdModalState, setPwdModalState] = useState<{
     isOpen: boolean;
     item: ShareItem | null;
-    actionType: 'copy' | 'download' | 'preview' | 'view_markdown' | 'view_image';
+    actionType: 'copy' | 'download' | 'preview' | 'view_markdown' | 'view_image' | 'view_batch';
   }>({
     isOpen: false,
     item: null,
@@ -228,8 +275,25 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
     onDownload(item);
   };
 
+  // 触发查看多文件合辑
+  const handleViewBatchClick = async (item: ShareItem) => {
+    if (item.hasPassword && !item.password) {
+      setPwdModalState({
+        isOpen: true,
+        item,
+        actionType: 'view_batch',
+      });
+      return;
+    }
+    setBatchViewerItem({ item, password: item.password });
+  };
+
   // 触发查看详情
   const handlePreviewClick = (item: ShareItem) => {
+    if (item.type === 'batch') {
+      handleViewBatchClick(item);
+      return;
+    }
     if (item.hasPassword && item.type === 'text' && !item.content) {
       setPwdModalState({
         isOpen: true,
@@ -267,6 +331,44 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
     setMarkdownModalItem(item);
   };
 
+  // 批量勾选打包下载 ZIP
+  const handleBatchDownloadZip = async () => {
+    if (selectedIds.size === 0) return;
+    setBatchDownloading(true);
+    try {
+      const res = await fetch('/api/records/batch-download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || '批量下载失败');
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const disposition = res.headers.get('Content-Disposition');
+      let filename = `LightDrop_批量打包_${new Date().toISOString().slice(0, 10)}.zip`;
+      if (disposition && disposition.includes('filename=')) {
+        const match = disposition.match(/filename\*?=(?:UTF-8'')?([^;]+)/i);
+        if (match && match[1]) {
+          filename = decodeURIComponent(match[1].replace(/["']/g, ''));
+        }
+      }
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(err.message || '批量下载失败');
+    } finally {
+      setBatchDownloading(false);
+    }
+  };
+
   // 密码弹窗提交确认
   const handlePasswordConfirm = async (password: string) => {
     const item = pwdModalState.item;
@@ -301,7 +403,140 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
         item: { ...item, password },
         password,
       });
+    } else if (pwdModalState.actionType === 'view_batch') {
+      await verifyPassword(item.id, password);
+      setBatchViewerItem({
+        item: { ...item, password },
+        password,
+      });
     }
+  };
+
+  // 渲染通用的“复制链接”与“二维码”下拉展开按钮 (全部类型通用)
+  const renderActionDropdowns = (targetItem: ShareItem) => {
+    const isCopyOpen = activeDropdown?.id === targetItem.id && activeDropdown?.type === 'copy';
+    const isQrOpen = activeDropdown?.id === targetItem.id && activeDropdown?.type === 'qr';
+    const isCopied = copiedLinkId === targetItem.id;
+    const itemIndex = records.findIndex((r) => r.id === targetItem.id);
+    const isNearBottom = itemIndex >= 0 && itemIndex >= records.length - 2 && records.length >= 3;
+    const menuPositionClass = isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5';
+
+    return (
+      <div className="inline-flex items-center gap-1.5 shrink-0">
+        {/* 复制链接下拉展开按钮 */}
+        <div className="relative inline-block text-left shrink-0">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveDropdown((prev) =>
+                prev?.id === targetItem.id && prev?.type === 'copy' ? null : { id: targetItem.id, type: 'copy' }
+              );
+            }}
+            className={`inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-medium shadow-2xs transition active:scale-95 whitespace-nowrap shrink-0 ${
+              isCopyOpen
+                ? 'border-blue-400 bg-blue-50/70 text-blue-600 ring-2 ring-blue-100'
+                : 'border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50/50 bg-white'
+            }`}
+            title={t('records.copyLink')}
+          >
+            {isCopied ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <span className="text-emerald-600 whitespace-nowrap">{t('records.copied')}</span>
+              </>
+            ) : (
+              <>
+                <Link2 className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                <span className="whitespace-nowrap">{t('records.copyLink')}</span>
+                <ChevronDown className="w-3 h-3 text-slate-400 shrink-0 -ml-0.5" />
+              </>
+            )}
+          </button>
+
+          {isCopyOpen && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className={`absolute right-0 ${menuPositionClass} w-36 bg-white rounded-xl shadow-xl border border-slate-200/90 py-1.5 z-30 animate-fade-in divide-y divide-slate-100/80`}
+            >
+              <button
+                type="button"
+                onClick={() => handleCopyDownloadLink(targetItem)}
+                className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-slate-700 hover:text-blue-600 hover:bg-blue-50/70 transition text-left group"
+                title={t('records.tipDownloadLink')}
+              >
+                <span className="flex items-center gap-2">
+                  <Download className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 shrink-0" />
+                  <span>{t('records.downloadLink')}</span>
+                </span>
+                {copiedDownloadId === targetItem.id && <Check className="w-3 h-3 text-emerald-500 shrink-0" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCopyViewLink(targetItem)}
+                className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-slate-700 hover:text-emerald-600 hover:bg-emerald-50/70 transition text-left group"
+                title={t('records.tipViewLink')}
+              >
+                <span className="flex items-center gap-2">
+                  <Eye className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-600 shrink-0" />
+                  <span>{t('records.viewLink')}</span>
+                </span>
+                {copiedViewId === targetItem.id && <Check className="w-3 h-3 text-emerald-500 shrink-0" />}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* 二维码下拉展开按钮 */}
+        <div className="relative inline-block text-left shrink-0">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveDropdown((prev) =>
+                prev?.id === targetItem.id && prev?.type === 'qr' ? null : { id: targetItem.id, type: 'qr' }
+              );
+            }}
+            className={`inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-medium shadow-2xs transition active:scale-95 whitespace-nowrap shrink-0 ${
+              isQrOpen
+                ? 'border-blue-400 bg-blue-50/70 text-blue-600 ring-2 ring-blue-100'
+                : 'border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50/50 bg-white'
+            }`}
+            title={t('records.qr')}
+          >
+            <QrCode className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+            <span className="whitespace-nowrap">{t('records.qr')}</span>
+            <ChevronDown className="w-3 h-3 text-slate-400 shrink-0 -ml-0.5" />
+          </button>
+
+          {isQrOpen && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className={`absolute right-0 ${menuPositionClass} w-36 bg-white rounded-xl shadow-xl border border-slate-200/90 py-1.5 z-30 animate-fade-in divide-y divide-slate-100/80`}
+            >
+              <button
+                type="button"
+                onClick={() => handleOpenItemQr(targetItem, 'download')}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:text-blue-600 hover:bg-blue-50/70 transition text-left group"
+                title={t('records.tipQrDownload')}
+              >
+                <Download className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 shrink-0" />
+                <span>{t('records.downloadLink')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOpenItemQr(targetItem, 'view')}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:text-emerald-600 hover:bg-emerald-50/70 transition text-left group"
+                title={t('records.tipQrView')}
+              >
+                <Eye className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-600 shrink-0" />
+                <span>{t('records.viewLink')}</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   const getRecordIcon = (item: ShareItem) => {
@@ -323,6 +558,20 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
       return (
         <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
           <Folder className="w-4 h-4 fill-amber-500 stroke-none" />
+        </div>
+      );
+    }
+    if (item.type === 'batch') {
+      if (item.isImageBatch) {
+        return (
+          <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
+            <Images className="w-4 h-4" />
+          </div>
+        );
+      }
+      return (
+        <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+          <Layers className="w-4 h-4" />
         </div>
       );
     }
@@ -369,6 +618,20 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
       return (
         <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0 shadow-xs border border-amber-200/60">
           <FolderArchive className="w-7 h-7" />
+        </div>
+      );
+    }
+    if (item.type === 'batch') {
+      if (item.isImageBatch) {
+        return (
+          <div className="w-14 h-14 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0 shadow-xs border border-purple-200/60">
+            <Images className="w-7 h-7" />
+          </div>
+        );
+      }
+      return (
+        <div className="w-14 h-14 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 shadow-xs border border-indigo-200/60">
+          <Layers className="w-7 h-7" />
         </div>
       );
     }
@@ -425,7 +688,15 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
   const isAllSelected = records.length > 0 && selectedIds.size === records.length;
 
   return (
-    <div id="records-section" className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+    <div id="records-section" className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden relative">
+      {/* 点击外部区域收起下拉菜单 */}
+      {activeDropdown && (
+        <div
+          className="fixed inset-0 z-20 cursor-default"
+          onClick={() => setActiveDropdown(null)}
+        />
+      )}
+
       {/* 顶部操作工具栏 */}
       <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         {/* 左侧：标题与分类药丸 */}
@@ -515,15 +786,28 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
             <span>{t('records.selectAll')}{selectedIds.size > 0 ? t('records.selectedCount', { count: selectedIds.size }) : ''}</span>
           </label>
 
-          {/* 批量清理 */}
+          {/* 批量下载与批量清理 */}
           {selectedIds.size > 0 && (
-            <button
-              onClick={triggerBatchDelete}
-              className="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 rounded-xl text-xs font-medium transition active:scale-95"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              {t('records.batchDelete')}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={handleBatchDownloadZip}
+                disabled={batchDownloading}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100/90 rounded-xl text-xs font-medium transition active:scale-95 disabled:opacity-50"
+                title={t('records.batchDownloadTip', '将选中的记录打包为 ZIP 下载')}
+              >
+                <Download className={`w-3.5 h-3.5 ${batchDownloading ? 'animate-bounce' : ''}`} />
+                <span>{batchDownloading ? t('records.batchDownloading', '打包中...') : t('records.batchDownloadZip', '批量下载 (ZIP)')}</span>
+              </button>
+
+              <button
+                onClick={triggerBatchDelete}
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 rounded-xl text-xs font-medium transition active:scale-95"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {t('records.batchDelete')}
+              </button>
+            </>
           )}
 
           {/* 一键清空全部 */}
@@ -550,16 +834,16 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
 
       {/* 数据表格 */}
       <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[760px]">
+        <table className="w-full text-left border-collapse min-w-[1020px]">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50/60 text-[11px] font-medium text-slate-400 select-none whitespace-nowrap">
               <th className="py-2.5 px-4 w-10 text-center shrink-0"></th>
               <th className="py-2.5 px-3 w-24 shrink-0">{t('records.thType')}</th>
-              <th className="py-2.5 px-4 w-[260px] max-w-[320px]">{t('records.thContent')}</th>
+              <th className="py-2.5 px-4 min-w-[220px] max-w-[460px]">{t('records.thContent')}</th>
               <th className="py-2.5 px-3 w-28 shrink-0 text-center">{t('records.thSender', '发送者')}</th>
               <th className="py-2.5 px-4 w-28 shrink-0">{t('records.thTime')}</th>
               <th className="py-2.5 px-4 w-32 shrink-0 text-center">{t('records.thPermission')}</th>
-              <th className="py-2.5 px-4 w-72 min-w-[280px] shrink-0 text-right">{t('records.thActions')}</th>
+              <th className="py-2.5 px-4 min-w-[390px] shrink-0 text-right">{t('records.thActions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-xs">
@@ -598,19 +882,29 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                     <td className="py-3 px-3 whitespace-nowrap shrink-0">
                       <div
                         className={`flex items-center gap-1.5 whitespace-nowrap ${
-                          isImageItem(item) ? 'cursor-pointer group/type' : ''
+                          isImageItem(item) || item.type === 'batch' ? 'cursor-pointer group/type' : ''
                         }`}
                         onClick={() => {
-                          if (isImageItem(item)) {
+                          if (item.type === 'batch') {
+                            handleViewBatchClick(item);
+                          } else if (isImageItem(item)) {
                             handleViewImageClick(item);
                           }
                         }}
-                        title={isImageItem(item) ? t('records.clickToViewImage', '点击全屏查看图片') : undefined}
+                        title={
+                          item.type === 'batch'
+                            ? item.isImageBatch
+                              ? t('records.clickToViewBatchImages', '点击浏览图片合辑')
+                              : t('records.clickToViewBatchFiles', '点击浏览文件合辑')
+                            : isImageItem(item)
+                            ? t('records.clickToViewImage', '点击全屏查看图片')
+                            : undefined
+                        }
                       >
                         {getRecordIcon(item)}
                         <span
                           className={`font-medium whitespace-nowrap transition ${
-                            isImageItem(item)
+                            isImageItem(item) || item.type === 'batch'
                               ? 'text-slate-600 group-hover/type:text-blue-600 group-hover/type:underline underline-offset-2'
                               : 'text-slate-600'
                           }`}
@@ -621,13 +915,17 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                             ? t('records.typeImage')
                             : item.type === 'folder'
                             ? t('records.typeFolder')
+                            : item.type === 'batch'
+                            ? item.isImageBatch
+                              ? t('records.typeImageBatch', '图片合辑')
+                              : t('records.typeBatch', '文件合辑')
                             : t('records.typeFile')}
                         </span>
                       </div>
                     </td>
 
                     {/* 内容 / 文件名 */}
-                    <td className="py-3 px-4 max-w-[280px] sm:max-w-[320px]">
+                    <td className="py-3 px-4 min-w-[220px] max-w-[460px]">
                       <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-1.5 min-w-0">
                           {item.isUrl ? (
@@ -646,6 +944,8 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                               onClick={() => {
                                 if (item.type === 'text') {
                                   handleViewMarkdownClick(item);
+                                } else if (item.type === 'batch') {
+                                  handleViewBatchClick(item);
                                 } else if (isImageItem(item)) {
                                   handleViewImageClick(item);
                                 } else {
@@ -669,6 +969,11 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                                 : t('records.textSummary', { count: (item.content || item.title || '').length })
                               : item.type === 'folder'
                               ? t('preview.folderWithCount', { count: item.fileCount || 0 })
+                              : item.type === 'batch'
+                              ? t('records.batchCountSummary', '共 {{count}} 个文件，{{size}}', {
+                                  count: item.files?.length || 0,
+                                  size: formatBytes(item.fileSize),
+                                })
                               : item.type === 'image'
                               ? t('records.imageFile')
                               : getFileTypeLabel(item.fileName, item.extension, item.mimeType)}
@@ -721,7 +1026,7 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                     </td>
 
                     {/* 操作列：单行绝不折行 */}
-                    <td className="py-3 px-4 text-right whitespace-nowrap shrink-0">
+                    <td className="py-3 px-4 text-right whitespace-nowrap shrink-0 min-w-[390px]">
                       <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
                         {item.type === 'text' ? (
                           <>
@@ -762,81 +1067,62 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                               )}
                             </button>
 
-                            {/* 复制文本专属链接 */}
-                            <button
-                              onClick={() => handleCopyDownloadLink(item)}
-                              className="inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50/50 bg-white text-[11px] font-medium shadow-xs transition active:scale-95 whitespace-nowrap shrink-0"
-                              title={item.hasPassword ? t('shareModal.title', '分享提取信息') : t('records.tipCopyLink')}
-                            >
-                              {copiedLinkId === item.id ? (
-                                <>
-                                  <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                                  <span className="text-emerald-600 whitespace-nowrap">{t('records.copied')}</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Link2 className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                                  <span className="whitespace-nowrap">{t('records.copyLink')}</span>
-                                </>
-                              )}
-                            </button>
+                              {/* 复制链接与二维码下拉菜单 (支持下载链接与查看链接) */}
+                              {renderActionDropdowns(item)}
+                            </>
+                          ) : item.type === 'batch' ? (
+                            <>
+                              {/* 查看合辑内容 */}
+                              <button
+                                onClick={() => handleViewBatchClick(item)}
+                                className="inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded-lg border border-indigo-200/90 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50/70 bg-white text-[11px] font-medium shadow-xs transition active:scale-95 whitespace-nowrap shrink-0"
+                                title={item.hasPassword && !item.password ? t('records.tipViewPwd') : t('records.tipViewBatch', '查看合辑内容与文件')}
+                              >
+                                {item.hasPassword && !item.password ? (
+                                  <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                ) : (
+                                  <Eye className="w-3.5 h-3.5 shrink-0" />
+                                )}
+                                <span className="whitespace-nowrap">{t('records.view', '查看')}</span>
+                              </button>
 
-                            {/* 专属二维码 */}
-                            <button
-                              onClick={() => handleOpenItemQr(item)}
-                              className="inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50/50 bg-white text-[11px] font-medium shadow-xs transition active:scale-95 whitespace-nowrap shrink-0"
-                              title={t('records.tipQrDirect')}
-                            >
-                              <QrCode className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                              <span className="whitespace-nowrap">{t('records.qr')}</span>
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            {/* 下载文件 */}
-                            <button
-                              onClick={() => handleDownloadClick(item)}
-                              className="inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded-lg border border-blue-200/90 text-blue-600 hover:text-blue-700 hover:bg-blue-50/70 bg-white text-[11px] font-medium shadow-xs transition active:scale-95 whitespace-nowrap shrink-0"
-                              title={item.hasPassword ? t('records.tipDownloadPwd') : t('records.tipDownload')}
-                            >
-                              {item.hasPassword ? (
-                                <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                              ) : (
-                                <Download className="w-3.5 h-3.5 shrink-0" />
-                              )}
-                              <span className="whitespace-nowrap">{t('records.download')}</span>
-                            </button>
+                              {/* 打包下载合辑 ZIP */}
+                              <button
+                                onClick={() => handleDownloadClick(item)}
+                                className="inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded-lg border border-blue-200/90 text-blue-600 hover:text-blue-700 hover:bg-blue-50/70 bg-white text-[11px] font-medium shadow-xs transition active:scale-95 whitespace-nowrap shrink-0"
+                                title={item.hasPassword ? t('records.tipDownloadPwd') : t('records.tipDownloadBatch', '打包下载合辑 ZIP')}
+                              >
+                                {item.hasPassword ? (
+                                  <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                ) : (
+                                  <Download className="w-3.5 h-3.5 shrink-0" />
+                                )}
+                                <span className="whitespace-nowrap">{t('records.downloadZip', '下载 ZIP')}</span>
+                              </button>
 
-                            {/* 复制下载链接 */}
-                            <button
-                              onClick={() => handleCopyDownloadLink(item)}
-                              className="inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50/50 bg-white text-[11px] font-medium shadow-xs transition active:scale-95 whitespace-nowrap shrink-0"
-                              title={t('records.tipCopyLink')}
-                            >
-                              {copiedLinkId === item.id ? (
-                                <>
-                                  <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                                  <span className="text-emerald-600 whitespace-nowrap">{t('records.copied')}</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Link2 className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                                  <span className="whitespace-nowrap">{t('records.copyLink')}</span>
-                                </>
-                              )}
-                            </button>
+                              {/* 复制链接与二维码下拉菜单 (支持下载链接与查看链接) */}
+                              {renderActionDropdowns(item)}
+                            </>
+                          ) : (
+                            <>
+                              {/* 下载文件 */}
+                              <button
+                                onClick={() => handleDownloadClick(item)}
+                                className="inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded-lg border border-blue-200/90 text-blue-600 hover:text-blue-700 hover:bg-blue-50/70 bg-white text-[11px] font-medium shadow-xs transition active:scale-95 whitespace-nowrap shrink-0"
+                                title={item.hasPassword ? t('records.tipDownloadPwd') : t('records.tipDownload')}
+                              >
+                                {item.hasPassword ? (
+                                  <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                ) : (
+                                  <Download className="w-3.5 h-3.5 shrink-0" />
+                                )}
+                                <span className="whitespace-nowrap">{t('records.download')}</span>
+                              </button>
 
-                            {/* 显示下载二维码 */}
-                            <button
-                              onClick={() => handleOpenItemQr(item)}
-                              className="inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50/50 bg-white text-[11px] font-medium shadow-xs transition active:scale-95 whitespace-nowrap shrink-0"
-                              title={t('records.tipFileQr')}
-                            >
-                              <QrCode className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                              <span className="whitespace-nowrap">{t('records.qr')}</span>
-                            </button>
-                          </>
-                        )}
+                              {/* 复制链接与二维码下拉菜单 (支持下载链接与查看链接) */}
+                              {renderActionDropdowns(item)}
+                            </>
+                          )}
 
                         {/* 删除记录 */}
                         <button
@@ -974,6 +1260,11 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                             ({t('preview.folderWithCount', { count: previewItem.fileCount })})
                           </span>
                         )}
+                        {previewItem.type === 'batch' && (
+                          <span className="text-indigo-700 font-medium">
+                            ({t('send.filesCount', '{{count}} 个文件', { count: previewItem.files?.length || 0 })})
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1001,37 +1292,13 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                     </div>
                   )}
 
-                  {/* 快捷操作：复制直链与二维码 */}
+                  {/* 快捷操作：复制链接与二维码 (支持下载链接与查看链接) */}
                   <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 text-xs text-slate-500">
                     <span className="text-[11px] text-slate-400">
                       {t('records.tipClickDownloadBelow')}
                     </span>
                     <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => handleCopyDownloadLink(previewItem)}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 text-[11px] font-medium shadow-2xs transition active:scale-95"
-                        title={t('records.tipCopyLink')}
-                      >
-                        {copiedLinkId === previewItem.id ? (
-                          <>
-                            <Check className="w-3 h-3 text-emerald-500" />
-                            <span className="text-emerald-600">{t('records.copied')}</span>
-                          </>
-                        ) : (
-                          <>
-                            <Link2 className="w-3 h-3" />
-                            <span>{t('records.copyLink')}</span>
-                          </>
-                        )}
-                      </button>
-                      <button
-                        onClick={() => handleOpenItemQr(previewItem)}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 text-[11px] font-medium shadow-2xs transition active:scale-95"
-                        title={t('records.tipFileQr')}
-                      >
-                        <QrCode className="w-3 h-3" />
-                        <span>{t('records.qr')}</span>
-                      </button>
+                      {renderActionDropdowns(previewItem)}
                     </div>
                   </div>
                 </div>
@@ -1060,6 +1327,28 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                 >
                   {t('records.copyAll')}
                 </button>
+              ) : previewItem.type === 'batch' ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      handleViewBatchClick(previewItem);
+                      setPreviewItem(null);
+                    }}
+                    className="px-3.5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-medium hover:bg-indigo-700 transition flex items-center gap-1.5 shadow-sm active:scale-95"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>{t('records.view', '查看合辑')}</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleDownloadClick(previewItem);
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-medium hover:bg-blue-700 transition flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>{t('records.downloadZipAll', '打包下载全部 (.zip)')}</span>
+                  </button>
+                </div>
               ) : (
                 <button
                   onClick={() => {
@@ -1107,12 +1396,13 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
         confirmText={deleteModalState.confirmText}
       />
 
-      {/* 文件专属下载二维码弹窗 */}
+      {/* 文件专属下载/查看二维码弹窗 */}
       <FileQrModal
         isOpen={Boolean(fileQrData)}
         onClose={() => setFileQrData(null)}
         item={fileQrData?.item || null}
         downloadUrl={fileQrData?.downloadUrl || ''}
+        mode={fileQrData?.mode}
       />
 
       {/* 文本 Markdown 渲染大弹窗 */}
@@ -1161,6 +1451,19 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
           password={imageViewerItem.password}
           onDownload={onDownload}
           currentAccessUrl={currentAccessUrl}
+        />
+      )}
+
+      {/* 批量多文件合辑大弹窗 */}
+      {batchViewerItem && (
+        <BatchViewerModal
+          isOpen={Boolean(batchViewerItem)}
+          onClose={() => setBatchViewerItem(null)}
+          item={batchViewerItem.item}
+          password={batchViewerItem.password}
+          onDownloadBatch={onDownload}
+          currentAccessUrl={currentAccessUrl}
+          verifyPassword={verifyPassword}
         />
       )}
     </div>

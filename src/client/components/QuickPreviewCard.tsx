@@ -14,6 +14,8 @@ import {
   Image as ImageIcon,
   Inbox,
   Eye,
+  Layers,
+  Images,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ShareItem, SystemStats } from '@shared/types';
@@ -21,6 +23,7 @@ import { formatBytes, formatDisplayTime, getFileTypeLabel, isImageItem } from '.
 import { PasswordModal } from './PasswordModal';
 import { TextMarkdownModal } from './TextMarkdownModal';
 import { ImageViewerModal } from './ImageViewerModal';
+import { BatchViewerModal } from './BatchViewerModal';
 import { getCharacterInfo, getDisplayNickname } from '../utils/nickname';
 
 export interface QuickPreviewCardProps {
@@ -44,12 +47,13 @@ export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [markdownModalItem, setMarkdownModalItem] = useState<ShareItem | null>(null);
   const [imageViewerItem, setImageViewerItem] = useState<{ item: ShareItem; password?: string } | null>(null);
+  const [batchViewerItem, setBatchViewerItem] = useState<{ item: ShareItem; password?: string } | null>(null);
 
   // 密码校验弹窗状态
   const [pwdModalState, setPwdModalState] = useState<{
     isOpen: boolean;
     item: ShareItem | null;
-    actionType: 'copy' | 'download' | 'view_markdown' | 'view_image';
+    actionType: 'copy' | 'download' | 'view_markdown' | 'view_image' | 'view_batch';
   }>({
     isOpen: false,
     item: null,
@@ -84,6 +88,20 @@ export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
       return (
         <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
           <FolderArchive className="w-4 h-4" />
+        </div>
+      );
+    }
+    if (item.type === 'batch') {
+      if (item.isImageBatch) {
+        return (
+          <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
+            <Images className="w-4 h-4" />
+          </div>
+        );
+      }
+      return (
+        <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+          <Layers className="w-4 h-4" />
         </div>
       );
     }
@@ -131,6 +149,19 @@ export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
       return;
     }
     onDownloadFile(item);
+  };
+
+  // 点击查看多文件合辑
+  const handleViewBatchClick = (item: ShareItem) => {
+    if (item.hasPassword && !item.password) {
+      setPwdModalState({
+        isOpen: true,
+        item,
+        actionType: 'view_batch',
+      });
+      return;
+    }
+    setBatchViewerItem({ item, password: item.password });
   };
 
   // 点击查看文本
@@ -184,6 +215,12 @@ export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
     } else if (pwdModalState.actionType === 'view_image') {
       await verifyPassword(item.id, password);
       setImageViewerItem({
+        item: { ...item, password },
+        password,
+      });
+    } else if (pwdModalState.actionType === 'view_batch') {
+      await verifyPassword(item.id, password);
+      setBatchViewerItem({
         item: { ...item, password },
         password,
       });
@@ -243,6 +280,8 @@ export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
                           onClick={() => {
                             if (item.type === 'text') {
                               handleViewClick(item);
+                            } else if (item.type === 'batch') {
+                              handleViewBatchClick(item);
                             } else if (isImageItem(item)) {
                               handleViewImageClick(item);
                             } else {
@@ -296,6 +335,11 @@ export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
                         {item.type === 'folder' && (
                           <span>
                             {formatBytes(item.fileSize)} · {t('preview.folderWithCount', { count: item.fileCount || 0 })}
+                          </span>
+                        )}
+                        {item.type === 'batch' && (
+                          <span>
+                            {formatBytes(item.fileSize)} · {item.isImageBatch ? t('records.typeImageBatch', '图片合辑') : t('records.typeBatch', '文件合辑')} ({item.files?.length || 0})
                           </span>
                         )}
                       </div>
@@ -361,6 +405,29 @@ export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
                         >
                           <Download className="w-3.5 h-3.5 shrink-0" />
                           <span className="text-[11px] hidden sm:inline">{t('preview.download')}</span>
+                        </button>
+                      </div>
+                    ) : item.type === 'batch' ? (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleViewBatchClick(item)}
+                          className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-200 shadow-sm transition active:scale-95 flex items-center gap-1 text-xs font-medium"
+                          title={t('records.view', '查看')}
+                        >
+                          {item.hasPassword && !item.password ? (
+                            <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          ) : (
+                            <Eye className="w-3.5 h-3.5 shrink-0" />
+                          )}
+                          <span className="text-[11px] hidden sm:inline">{t('records.view', '查看')}</span>
+                        </button>
+                        <button
+                          onClick={() => handleDownloadClick(item)}
+                          className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 shadow-sm transition active:scale-95 flex items-center gap-1 text-xs font-medium"
+                          title={t('records.downloadZip', '下载 ZIP')}
+                        >
+                          <Download className="w-3.5 h-3.5 shrink-0" />
+                          <span className="text-[11px] hidden sm:inline">{t('records.downloadZip', '下载 ZIP')}</span>
                         </button>
                       </div>
                     ) : (
@@ -463,6 +530,18 @@ export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
           allImageItems={recentRecords.filter(isImageItem)}
           password={imageViewerItem.password}
           onDownload={onDownloadFile}
+        />
+      )}
+
+      {/* 批量多文件合辑大弹窗 */}
+      {batchViewerItem && (
+        <BatchViewerModal
+          isOpen={Boolean(batchViewerItem)}
+          onClose={() => setBatchViewerItem(null)}
+          item={batchViewerItem.item}
+          password={batchViewerItem.password}
+          onDownloadBatch={onDownloadFile}
+          verifyPassword={verifyPassword}
         />
       )}
     </div>
