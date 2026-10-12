@@ -552,22 +552,60 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </select>
             </div>
 
-            {/* 管理员 IP 授权列表 (仅管理员可见并可配置) */}
+            {/* 管理员 IP 授权与本机白名单展示 (仅管理员可见并可配置) */}
             {isAdmin && (
-              <div className="bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80 space-y-2 mb-1">
-                <label className="font-semibold text-slate-700 flex items-center gap-1.5">
-                  <Shield className="w-3.5 h-3.5 text-blue-600" />
-                  {t('settings.adminIps')}
-                </label>
-                <input
-                  type="text"
-                  value={adminIpsInput}
-                  onChange={(e) => setAdminIpsInput(e.target.value)}
-                  placeholder={t('settings.adminIpsPlaceholder')}
-                  className="w-full p-2 bg-white border border-slate-200 rounded-lg text-slate-700 font-mono focus:outline-none focus:border-blue-500 text-xs"
-                />
-                <div className="text-[11px] text-slate-400 leading-relaxed">
-                  {t('settings.adminIpsTip')}
+              <div className="bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80 space-y-3 mb-1">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-slate-700 flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5 text-blue-600" />
+                    {t('settings.adminIpsTitle')}
+                  </label>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    {t('settings.hostIpsAutoWhitelisted')}
+                  </span>
+                </div>
+
+                {/* 本机网卡 IP 自动白名单芯片展示 */}
+                {settings.deviceIps && settings.deviceIps.length > 0 && (
+                  <div className="p-2.5 bg-white rounded-lg border border-slate-200/80 space-y-1.5">
+                    <div className="text-[11px] text-slate-500 font-medium">
+                      {t('settings.deviceIpsLabel')}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {settings.deviceIps.map((ip) => (
+                        <span
+                          key={ip}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded font-mono text-[11px] font-medium"
+                        >
+                          <Check className="w-3 h-3 text-emerald-600" />
+                          {ip}
+                          {ip === '127.0.0.1' && (
+                            <span className="text-[9px] text-emerald-600/80 font-sans">
+                              ({t('settings.loopback')})
+                            </span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 额外授权的外部设备 IP 输入框 */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-medium text-slate-600 flex items-center gap-1">
+                    {t('settings.extraAdminIpsLabel')}
+                  </label>
+                  <input
+                    type="text"
+                    value={adminIpsInput}
+                    onChange={(e) => setAdminIpsInput(e.target.value)}
+                    placeholder={t('settings.adminIpsPlaceholder')}
+                    className="w-full p-2 bg-white border border-slate-200 rounded-lg text-slate-700 font-mono focus:outline-none focus:border-blue-500 text-xs"
+                  />
+                  <div className="text-[11px] text-slate-400 leading-relaxed">
+                    {t('settings.adminIpsTip')}
+                  </div>
                 </div>
               </div>
             )}

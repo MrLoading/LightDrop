@@ -9,6 +9,7 @@ export interface ExtendedSettings extends SystemSettings {
   isAdmin?: boolean;
   clientIp?: string;
   configFilePath?: string;
+  deviceIps?: string[];
 }
 
 export function useSettings() {

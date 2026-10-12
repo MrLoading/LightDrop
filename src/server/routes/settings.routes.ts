@@ -7,6 +7,7 @@ import { storageService } from '../services/storage.service.js';
 import { wsService } from '../websocket/ws.server.js';
 import { cleanupService } from '../services/cleanup.service.js';
 import { auditService } from '../services/audit.service.js';
+import { getAllNetworkIps } from '../services/ip.service.js';
 
 export const settingsRouter: Router = Router();
 
@@ -19,6 +20,7 @@ settingsRouter.get('/', (req: Request, res: Response) => {
   const clientIp = auditService.getClientIp(req);
   const isAdmin = auditService.isAdmin(req);
   const configFilePath = configManager.getConfigFilePath();
+  const deviceIps = Array.from(new Set(['127.0.0.1', ...getAllNetworkIps().map((item) => item.ip)]));
 
   let isWritable = false;
   let diskSizeBytes = 0;
@@ -38,6 +40,7 @@ settingsRouter.get('/', (req: Request, res: Response) => {
       isAdmin,
       clientIp,
       configFilePath,
+      deviceIps,
       isWritable,
       storageSizeBytes: diskSizeBytes,
     },
@@ -137,6 +140,7 @@ settingsRouter.post('/', (req: Request, res: Response) => {
   const clientIp = auditService.getClientIp(req);
   const isAdmin = auditService.isAdmin(req);
   const configFilePath = configManager.getConfigFilePath();
+  const deviceIps = Array.from(new Set(['127.0.0.1', ...getAllNetworkIps().map((item) => item.ip)]));
 
   let isWritable = false;
   let diskSizeBytes = 0;
@@ -155,6 +159,7 @@ settingsRouter.post('/', (req: Request, res: Response) => {
       isAdmin,
       clientIp,
       configFilePath,
+      deviceIps,
       isWritable,
       storageSizeBytes: diskSizeBytes,
     },

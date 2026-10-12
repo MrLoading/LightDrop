@@ -357,9 +357,14 @@
     "configFileTip": "Supports hot-reloading without restarts. Saving here or editing this JSON file on the host server applies changes instantly across all clients.",
     "readonlyNotice": "Current mode is read-only: To configure storage directory, upload limits, or cleanup policies, please access directly on the host server, or add your IP to adminIps in lightdrop.config.json.",
     "adminOnly": "Admin Only",
+    "adminIpsTitle": "Admin IP Permissions & Whitelist",
+    "hostIpsAutoWhitelisted": "All Host IPs Auto-Whitelisted Permanently",
+    "deviceIpsLabel": "Server network interface IPs (Built-in whitelist, no configuration needed):",
+    "extraAdminIpsLabel": "Authorized external device IPs (optional, comma-separated):",
+    "loopback": "Loopback",
     "adminIps": "Authorized Admin IPs (comma-separated)",
-    "adminIpsPlaceholder": "e.g. 192.168.1.100, 10.0.0.*",
-    "adminIpsTip": "Specify LAN client IPs allowed to configure server settings. Wildcards (e.g. 192.168.1.*) supported. Host is always admin."
+    "adminIpsPlaceholder": "e.g. 192.168.1.50, 10.0.0.*",
+    "adminIpsTip": "To allow phones, tablets, or other LAN devices to manage server settings, enter their IPs here (supports wildcards like 192.168.1.*). Host IPs always have full admin access."
   },
   "footer": {
     "onlineVisitors": "Online Visitors",
