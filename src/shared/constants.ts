@@ -9,6 +9,7 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   autoCleanupDays: 0,  // 默认永不清理
   allowAnonymousDelete: true,
   siteTitle: 'LightDrop',
+  adminIps: [],
 };
 
 export const STORAGE_FILES_DIRNAME = 'files';

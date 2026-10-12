@@ -5,6 +5,8 @@ import { wsService } from './websocket/ws.server.js';
 import { configManager } from './config/config.manager.js';
 import { cleanupService } from './services/cleanup.service.js';
 import { getLocalIpAddress } from './services/ip.service.js';
+import { fileDatabase } from './database/file.database.js';
+import { auditService } from './services/audit.service.js';
 
 dotenv.config();
 
@@ -19,6 +21,18 @@ wsService.init(server);
 
 // 启动定期清理任务
 cleanupService.start();
+
+// 注册配置文件免重启热更新监听 (支持后台配置修改与实时生效)
+configManager.on('reload', (newSettings, oldSettings) => {
+  console.log('[Server] Settings reload detected. Applying changes dynamically...');
+  if (oldSettings && newSettings.storageDir !== oldSettings.storageDir) {
+    fileDatabase.reload();
+    auditService.refreshPath();
+  }
+  cleanupService.runCleanup();
+  wsService.broadcast('SETTINGS_UPDATED', newSettings);
+  wsService.broadcast('STATS_UPDATED', fileDatabase.getStats());
+});
 
 const settings = configManager.getSettings();
 const port = Number(process.env.PORT) || settings.port || 8080;

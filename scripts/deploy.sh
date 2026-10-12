@@ -40,6 +40,7 @@ DATA_DIR=""
 IMAGE_TAR=""
 SKIP_BUILD=false
 AUTO_YES=false
+ADMIN_IPS=""
 
 # 标识名称定义
 CONTAINER_NAME="lightdrop"
@@ -82,6 +83,7 @@ Options:
   -l, --lang <zh|en>         Installation language: zh (Chinese, Default) | en (English)
   -p, --port <PORT>          Service HTTP listening port (Default: 8080)
   -d, --data-dir <DIR>       Persistent data directory (Default: <WORKDIR>/data)
+  --admin-ips <IP_LIST>      Allowed admin IP list (comma-separated, e.g. "192.168.1.100,10.0.0.*")
   --image-tar <FILE>         Import pre-built Docker image .tar directly without rebuilding
   --skip-build               Skip frontend/backend compilation step
   -y, --yes                  Non-interactive mode, apply defaults or arguments directly
@@ -117,6 +119,7 @@ LightDrop 跨平台构建与部署工具 - v${VERSION}
   -l, --lang <zh|en>         选择安装语言: zh (简体中文, 默认) | en (English)
   -p, --port <端口>          服务监听端口 (默认: 8080)
   -d, --data-dir <路径>      数据持久化目录 (默认: <工作路径>/data)
+  --admin-ips <IP列表>       允许配置服务器的管理员 IP 列表 (逗号分隔，如 "192.168.1.100,10.0.0.*")
   --image-tar <文件>         使用导出的 Docker 镜像 .tar 文件直接导入
   --skip-build               跳过源码编译步骤
   -y, --yes                  非交互模式，全部使用默认参数或命令行传入参数
@@ -161,6 +164,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     -d|--data-dir)
       DATA_DIR="$2"
+      shift 2
+      ;;
+    --admin-ips)
+      ADMIN_IPS="$2"
       shift 2
       ;;
     --image-tar)
@@ -357,6 +364,19 @@ if is_interactive; then
       PORT="$input_port"
     fi
   fi
+
+  # 7. 管理员 IP 授权 (可选)
+  if [ -z "$ADMIN_IPS" ]; then
+    echo ""
+    if [ "$LANG_OPT" = "en" ]; then
+      read -r -p "Admin IP list (Optional, comma-separated, e.g. 192.168.1.100, leave blank for host only): " input_admin_ips
+    else
+      read -r -p "管理员 IP 列表 (可选，逗号分隔，如 192.168.1.100,10.0.0.*，留空则仅宿主机为管理员): " input_admin_ips
+    fi
+    if [ -n "$input_admin_ips" ]; then
+      ADMIN_IPS="$input_admin_ips"
+    fi
+  fi
 fi
 
 # ----------------- 非交互/命令行参数自动推断 -----------------
@@ -432,6 +452,7 @@ RUNINFO_FILE="${RUNINFO_DIR}/lightdrop-runinfo.json"
 APP_DIR="${WORK_DIR}/app"
 LOG_DIR="${WORK_DIR}/logs"
 PID_FILE="${RUNINFO_DIR}/lightdrop.pid"
+CONFIG_FILE_PATH="${WORK_DIR}/lightdrop.config.json"
 
 # macOS LaunchAgent 路径推导
 if [ "$CURRENT_OS" = "macos" ]; then
@@ -532,13 +553,52 @@ if [ "$DEPLOY_MODE" != "docker" ]; then
     cp "${REPO_ROOT}/pnpm-lock.yaml" "${APP_DIR}/"
   fi
 
-  # 写入引导配置文件 lightdrop.config.json
-  cat <<BOOTSTRAP_JSON > "${APP_DIR}/lightdrop.config.json"
+  # 解析 ADMIN_IPS 转为 JSON array
+  ADMIN_IPS_JSON="[]"
+  if [ -n "$ADMIN_IPS" ]; then
+    ADMIN_IPS_JSON=$(echo "$ADMIN_IPS" | awk -F',' '{
+      printf "["
+      count = 0
+      for (i=1; i<=NF; i++) {
+        gsub(/^[ \t]+|[ \t]+$/, "", $i)
+        if (length($i) > 0) {
+          if (count > 0) printf ", "
+          printf "\"%s\"", $i
+          count++
+        }
+      }
+      printf "]"
+    }')
+  fi
+
+  # 写入主配置文件 lightdrop.config.json (支持免重启热更新)
+  if [ ! -f "${CONFIG_FILE_PATH}" ]; then
+    cat <<BOOTSTRAP_JSON > "${CONFIG_FILE_PATH}"
 {
   "storageDir": "${DATA_DIR}",
-  "port": ${PORT}
+  "port": ${PORT},
+  "maxFileSizeMB": 1024,
+  "autoCleanupDays": 7,
+  "siteTitle": "LightDrop",
+  "adminIps": ${ADMIN_IPS_JSON}
 }
 BOOTSTRAP_JSON
+  else
+    if [ -n "$ADMIN_IPS" ]; then
+      log_info "更新现有配置文件中的管理员 IP 列表..."
+      "${NODE_BIN:-node}" -e '
+        const fs = require("fs");
+        const p = process.argv[1];
+        const ips = JSON.parse(process.argv[2]);
+        try {
+          const cfg = JSON.parse(fs.readFileSync(p, "utf8"));
+          cfg.adminIps = ips;
+          fs.writeFileSync(p, JSON.stringify(cfg, null, 2), "utf8");
+        } catch(e) {}
+      ' "${CONFIG_FILE_PATH}" "${ADMIN_IPS_JSON}" 2>/dev/null || true
+    fi
+  fi
+  cp -f "${CONFIG_FILE_PATH}" "${APP_DIR}/lightdrop.config.json"
 
   # 拷贝 node_modules 保证独立可运行
   if [ -d "${REPO_ROOT}/node_modules" ] && [ ! -d "${APP_DIR}/node_modules" ]; then
@@ -599,6 +659,8 @@ case "$DEPLOY_MODE" in
         <string>${PORT}</string>
         <key>PATH</key>
         <string>${NODE_ENV_PATH}</string>
+        <key>LIGHTDROP_CONFIG_PATH</key>
+        <string>${CONFIG_FILE_PATH}</string>
     </dict>
     <key>RunAtLoad</key>
     ${RUN_AT_LOAD_TAG}
@@ -667,6 +729,7 @@ RestartSec=5
 Environment=NODE_ENV=production
 Environment=PORT=${PORT}
 Environment=PATH=${NODE_ENV_PATH}
+Environment=LIGHTDROP_CONFIG_PATH=${CONFIG_FILE_PATH}
 
 [Install]
 WantedBy=multi-user.target
@@ -719,6 +782,7 @@ Set WshShell = CreateObject("WScript.Shell")
 WshShell.CurrentDirectory = "${APP_DIR}"
 WshShell.Environment("PROCESS")("PORT") = "${PORT}"
 WshShell.Environment("PROCESS")("NODE_ENV") = "production"
+WshShell.Environment("PROCESS")("LIGHTDROP_CONFIG_PATH") = "${CONFIG_FILE_PATH}"
 WshShell.Run """${NODE_BIN}"" dist/server/index.js", 0, False
 VBS_EOF
 
@@ -751,6 +815,7 @@ Set WshShell = CreateObject("WScript.Shell")
 WshShell.CurrentDirectory = "${APP_DIR}"
 WshShell.Environment("PROCESS")("PORT") = "${PORT}"
 WshShell.Environment("PROCESS")("NODE_ENV") = "production"
+WshShell.Environment("PROCESS")("LIGHTDROP_CONFIG_PATH") = "${CONFIG_FILE_PATH}"
 WshShell.Run """${NODE_BIN}"" dist/server/index.js", 0, False
 VBS_EOF
 
@@ -807,6 +872,8 @@ VBS_EOF
       --restart "${RESTART_POLICY}" \
       -p "${PORT}:8080" \
       -v "${DATA_DIR}:/app/data" \
+      -v "${CONFIG_FILE_PATH}:/app/lightdrop.config.json" \
+      -e LIGHTDROP_CONFIG_PATH=/app/lightdrop.config.json \
       -e PORT=8080 \
       -e NODE_ENV=production \
       "${IMAGE_NAME}" >/dev/null
@@ -830,7 +897,7 @@ VBS_EOF
 
     cd "${APP_DIR}"
     pm2 delete "${PM2_NAME}" >/dev/null 2>&1 || true
-    PORT="${PORT}" pm2 start ecosystem.config.cjs --name "${PM2_NAME}" --env production --update-env
+    LIGHTDROP_CONFIG_PATH="${CONFIG_FILE_PATH}" PORT="${PORT}" pm2 start ecosystem.config.cjs --name "${PM2_NAME}" --env production --update-env
     pm2 save >/dev/null 2>&1 || true
 
     if [ "$AUTOSTART" = true ]; then
@@ -857,6 +924,7 @@ VBS_EOF
     cd "${APP_DIR}"
     export NODE_ENV=production
     export PORT="${PORT}"
+    export LIGHTDROP_CONFIG_PATH="${CONFIG_FILE_PATH}"
 
     nohup "${NODE_BIN}" dist/server/index.js </dev/null > "${LOG_DIR}/app.log" 2>&1 &
     APP_PID=$!
@@ -915,6 +983,8 @@ cat <<EOF > "${RUNINFO_FILE}"
   "dataDir": "${DATA_DIR}",
   "runInfoDir": "${RUNINFO_DIR}",
   "runInfoFile": "${RUNINFO_FILE}",
+  "configFilePath": "${CONFIG_FILE_PATH}",
+  "adminIps": ${ADMIN_IPS_JSON:-[]},
   "port": ${PORT},
   "containerName": "${CONTAINER_NAME}",
   "imageName": "${IMAGE_NAME}",
@@ -954,11 +1024,13 @@ print_card_row "运行状态 (Status)" "${GREEN}● 活跃运行中 (Active / Ru
 print_card_row "本机访问 (Local)" "${BOLD}${LOCAL_URL}${RESET}"
 print_card_row "局域网访问 (LAN)" "${BOLD}${GREEN}${ACCESS_URL}${RESET}"
 print_card_row "工作路径 (WorkDir)" "${WORK_DIR}"
+print_card_row "配置文件 (Config)" "${CONFIG_FILE_PATH} (支持免重启热更新)"
 print_card_row "数据存储 (DataDir)" "${DATA_DIR}"
 print_card_row "运行记录 (RunInfo)" "${RUNINFO_FILE}"
 print_card_row "服务端口 (Port)" "${PORT}"
 
 echo -e "\n${BOLD}针对当前系统的运维指令:${RESET}"
+echo -e "  • 配置文件热修改: ${DIM}编辑 \"${CONFIG_FILE_PATH}\" 保存即自动生效 (免重启)${RESET}"
 case "$DEPLOY_MODE" in
   launchd)
     echo -e "  • 查看实时日志: ${DIM}tail -f \"${LOG_DIR}/app.log\"${RESET}"

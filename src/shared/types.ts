@@ -86,6 +86,7 @@ export interface SystemSettings {
   autoCleanupDays: number;      // 自动清理周期 (天, 0为永不清理)
   allowAnonymousDelete: boolean;// 是否允许访客删除记录
   siteTitle: string;            // 站点标题
+  adminIps?: string[];          // 允许修改服务器配置的管理员 IP 列表
 }
 
 /**

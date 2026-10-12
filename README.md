@@ -243,12 +243,60 @@ data/
 └── files/<recordId>/          # 上传的物理文件存储目录
 ```
 
+### 独立配置文件与免重启热更新 (`lightdrop.config.json`)
+
+系统提供独立的全局配置文件 `lightdrop.config.json`（位于部署工作目录，例如 macOS 原生服务为 `~/Library/Application Support/LightDrop/lightdrop.config.json`，源码运行则位于项目根目录）：
+
+```json
+{
+  "storageDir": "/Users/user/data",
+  "port": 8080,
+  "maxFileSizeMB": 1024,
+  "autoCleanupDays": 7,
+  "siteTitle": "LightDrop",
+  "adminIps": [
+    "192.168.1.100",
+    "10.0.0.*"
+  ]
+}
+```
+
+- **免重启热更新 (Hot-Reloading)**：任何时候直接打开该 JSON 配置文件进行编辑并保存，服务端底层监听机制将**毫秒级自动热更新**并应用新策略，且通过 WebSocket 实时广播同步至所有已连接的设备界面，**完全无需重启服务**。
+- **权限安全隔离 (Guest Read-Only / Admin)**：
+  - **服务器存储目录、单文件上传上限与自动清理策略**为服务端全局生效配置；
+  - 局域网内其他普通设备打开「设置」时，**所有服务器配置项均强制呈只读锁定状态**，界面呈现黄色访客标识，防止非管理员篡改；
+  - 仅**部署服务器本机（回环地址及宿主机物理网卡）**或在 `adminIps` 列表中指定的管理员 IP 设备具备可写修改权限；
+  - 部署脚本支持直接指定管理员 IP 列表：`./deploy.sh --admin-ips "192.168.1.100,10.0.0.*"`。
+
+### 手动重启或运维指令（若需物理重载进程）
+- **macOS (launchd)**:
+  ```bash
+  launchctl unload -w ~/Library/LaunchAgents/com.lightdrop.server.plist && launchctl load -w ~/Library/LaunchAgents/com.lightdrop.server.plist
+  ```
+- **Linux (systemd)**:
+  ```bash
+  sudo systemctl restart lightdrop.service
+  ```
+- **PM2**:
+  ```bash
+  pm2 restart lightdrop
+  ```
+- **Docker**:
+  ```bash
+  docker restart lightdrop
+  ```
+- **原生独立后台进程 (Standalone)**:
+  ```bash
+  kill -15 $(cat "<工作路径>/runinfo/lightdrop.pid")
+  ```
+
 ### 环境变量
 可创建 `.env` 文件覆盖默认参数：
 
 | 变量名 | 默认值 | 说明 |
 | :--- | :--- | :--- |
 | `PORT` | `8080` | 服务监听端口 |
+| `LIGHTDROP_CONFIG_PATH` | `./lightdrop.config.json` | 独立配置文件绝对路径（支持免重启热更新） |
 | `STORAGE_DIR` | `./data` | 实际物理存储目录（支持绝对路径或挂载的 NAS 路径） |
 | `NODE_ENV` | `production` | 运行环境模式 (`production` / `development`) |
 

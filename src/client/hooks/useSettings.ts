@@ -6,6 +6,9 @@ import i18n from '../i18n';
 export interface ExtendedSettings extends SystemSettings {
   isWritable?: boolean;
   storageSizeBytes?: number;
+  isAdmin?: boolean;
+  clientIp?: string;
+  configFilePath?: string;
 }
 
 export function useSettings() {

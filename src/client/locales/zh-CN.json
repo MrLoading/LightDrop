@@ -347,7 +347,19 @@
     "permissionGranted": "已授权",
     "sendTestNotification": "发送测试通知",
     "testNotificationTitle": "LightDrop · 系统通知测试",
-    "testNotificationBody": "系统通知已正常连接！局域网收到新文件或下载完成时将自动在屏幕右上角提醒您。"
+    "testNotificationBody": "系统通知已正常连接！局域网收到新文件或下载完成时将自动在屏幕右上角提醒您。",
+    "adminBadge": "管理员配置模式",
+    "adminBadgeDesc": "当前设备具备服务器全局配置修改权限 (IP: {{ip}})",
+    "guestBadge": "访客模式 (只读模式)",
+    "guestBadgeDesc": "服务器全局存储路径、单文件上传限制与自动清理策略仅允许在部署服务器本机或受信任的管理员设备上修改 (当前设备 IP: {{ip}})",
+    "serverConfigSection": "服务器全局配置",
+    "configFileLocation": "服务器独立配置文件",
+    "configFileTip": "支持免重启热更新。直接保存或在服务器上编辑该 JSON 文件，即可自动生效并广播至全部客户端。",
+    "readonlyNotice": "当前为只读模式：如需变更服务器存储目录、上传限制或清理策略，请直接在服务器本机访问，或通过配置文件 lightdrop.config.json 添加您的 IP 至 adminIps 列表中。",
+    "adminOnly": "仅管理员可配置",
+    "adminIps": "管理员 IP 列表 (以逗号分隔)",
+    "adminIpsPlaceholder": "例如: 192.168.1.100, 10.0.0.*",
+    "adminIpsTip": "指定局域网内可管理服务器配置的设备 IP，支持通配符（如 192.168.1.*）。本机 IP 始终具备管理权限。"
   },
   "footer": {
     "onlineVisitors": "在线访问者",

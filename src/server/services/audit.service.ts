@@ -102,6 +102,35 @@ class AuditService {
   }
 
   /**
+   * 判断请求是否拥有管理员权限（本机设备或在配置的 adminIps 列表中）
+   */
+  public isAdmin(req: Request): boolean {
+    if (this.isLocalDevice(req)) {
+      return true;
+    }
+
+    const clientIp = this.getClientIp(req);
+    const settings = configManager.getSettings();
+    const adminIps = settings.adminIps || [];
+
+    for (const rule of adminIps) {
+      const trimmed = rule.trim();
+      if (!trimmed) continue;
+      // 支持通配符如 192.168.1.* 或精准匹配
+      if (trimmed.endsWith('*')) {
+        const prefix = trimmed.slice(0, -1);
+        if (clientIp.startsWith(prefix)) {
+          return true;
+        }
+      } else if (clientIp === trimmed) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * 提取客户端操作者昵称 (优先请求头，次选 body 或 query，默认回退为海绵宝宝)
    */
   public getClientNickname(req: Request): string {

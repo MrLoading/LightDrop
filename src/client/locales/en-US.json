@@ -347,7 +347,19 @@
     "permissionGranted": "Granted",
     "sendTestNotification": "Send Test",
     "testNotificationTitle": "LightDrop · Test Notification",
-    "testNotificationBody": "Desktop notifications are working! You will be alerted when new files arrive or downloads finish."
+    "testNotificationBody": "Desktop notifications are working! You will be alerted when new files arrive or downloads finish.",
+    "adminBadge": "Administrator Mode",
+    "adminBadgeDesc": "Current device is authorized to modify server global settings (IP: {{ip}})",
+    "guestBadge": "Guest Mode (Read-only)",
+    "guestBadgeDesc": "Server global storage path, max upload size, and auto cleanup policies can only be configured on the host server or authorized admin IPs (Your IP: {{ip}})",
+    "serverConfigSection": "Server Global Settings",
+    "configFileLocation": "Server Configuration File",
+    "configFileTip": "Supports hot-reloading without restarts. Saving here or editing this JSON file on the host server applies changes instantly across all clients.",
+    "readonlyNotice": "Current mode is read-only: To configure storage directory, upload limits, or cleanup policies, please access directly on the host server, or add your IP to adminIps in lightdrop.config.json.",
+    "adminOnly": "Admin Only",
+    "adminIps": "Authorized Admin IPs (comma-separated)",
+    "adminIpsPlaceholder": "e.g. 192.168.1.100, 10.0.0.*",
+    "adminIpsTip": "Specify LAN client IPs allowed to configure server settings. Wildcards (e.g. 192.168.1.*) supported. Host is always admin."
   },
   "footer": {
     "onlineVisitors": "Online Visitors",

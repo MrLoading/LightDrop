@@ -6,6 +6,7 @@ import { fileDatabase } from '../database/file.database.js';
 import { storageService } from '../services/storage.service.js';
 import { wsService } from '../websocket/ws.server.js';
 import { cleanupService } from '../services/cleanup.service.js';
+import { auditService } from '../services/audit.service.js';
 
 export const settingsRouter: Router = Router();
 
@@ -15,6 +16,9 @@ export const settingsRouter: Router = Router();
 settingsRouter.get('/', (req: Request, res: Response) => {
   const settings = configManager.getSettings();
   const storageDir = settings.storageDir;
+  const clientIp = auditService.getClientIp(req);
+  const isAdmin = auditService.isAdmin(req);
+  const configFilePath = configManager.getConfigFilePath();
 
   let isWritable = false;
   let diskSizeBytes = 0;
@@ -31,6 +35,9 @@ settingsRouter.get('/', (req: Request, res: Response) => {
     success: true,
     data: {
       ...settings,
+      isAdmin,
+      clientIp,
+      configFilePath,
       isWritable,
       storageSizeBytes: diskSizeBytes,
     },
@@ -38,9 +45,17 @@ settingsRouter.get('/', (req: Request, res: Response) => {
 });
 
 /**
- * 校验指定目录是否合法可写
+ * 校验指定目录是否合法可写 (仅限管理员)
  */
 settingsRouter.post('/validate-dir', (req: Request, res: Response) => {
+  if (!auditService.isAdmin(req)) {
+    res.status(403).json({
+      success: false,
+      error: '权限不足：存储路径校验仅限服务器本机或管理员设备执行',
+    });
+    return;
+  }
+
   const { dirPath } = req.body;
   if (!dirPath || typeof dirPath !== 'string') {
     res.status(400).json({ success: false, error: '请提供目录路径' });
@@ -60,10 +75,18 @@ settingsRouter.post('/validate-dir', (req: Request, res: Response) => {
 });
 
 /**
- * 保存系统配置 (支持更换存储目录与数据迁移)
+ * 保存系统配置 (支持更换存储目录与数据迁移，仅限管理员)
  */
 settingsRouter.post('/', (req: Request, res: Response) => {
-  const { storageDir, maxFileSizeMB, autoCleanupDays, siteTitle, migrateData } = req.body;
+  if (!auditService.isAdmin(req)) {
+    res.status(403).json({
+      success: false,
+      error: '权限不足：服务器全局配置仅允许在部署服务器主机或受信任的管理员设备上修改',
+    });
+    return;
+  }
+
+  const { storageDir, maxFileSizeMB, autoCleanupDays, siteTitle, migrateData, adminIps } = req.body;
   const currentSettings = configManager.getSettings();
   const oldStorageDir = currentSettings.storageDir;
 
@@ -98,29 +121,22 @@ settingsRouter.post('/', (req: Request, res: Response) => {
     }
   }
 
-  // 保存新配置
+  const updatedAdminIps = Array.isArray(adminIps)
+    ? adminIps.filter((ip: any) => typeof ip === 'string' && ip.trim())
+    : currentSettings.adminIps;
+
+  // 保存新配置 (会自动触发 reload 事件并广播通知)
   const updated = configManager.saveSettings({
     storageDir: newResolvedStorageDir,
     maxFileSizeMB: typeof maxFileSizeMB === 'number' ? maxFileSizeMB : currentSettings.maxFileSizeMB,
     autoCleanupDays: typeof autoCleanupDays === 'number' ? autoCleanupDays : currentSettings.autoCleanupDays,
     siteTitle: typeof siteTitle === 'string' ? siteTitle.trim() : currentSettings.siteTitle,
+    adminIps: updatedAdminIps,
   });
-
-  // 如果存储目录发生变更，重新加载数据库
-  if (newResolvedStorageDir !== oldStorageDir) {
-    fileDatabase.reload();
-  }
-
-  // 若配置了自动清理，触发一次检查
-  cleanupService.runCleanup();
-
-  // 广播配置更新与最新状态
-  wsService.broadcast('SETTINGS_UPDATED', updated);
-  wsService.broadcast('STATS_UPDATED', fileDatabase.getStats());
 
   res.json({
     success: true,
     data: updated,
-    message: '设置已成功保存',
+    message: '设置已成功保存并立即生效',
   });
 });
