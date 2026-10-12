@@ -11,6 +11,7 @@ import { DownloadModal } from './components/DownloadModal';
 import { useRecords } from './hooks/useRecords';
 import { useWebSocket } from './hooks/useWebSocket';
 import { ShareItem, WsMessage } from '@shared/types';
+import { X } from 'lucide-react';
 
 export const App: React.FC = () => {
   const { t } = useTranslation();
@@ -149,11 +150,21 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f0f4f9] p-3 sm:p-6 lg:p-8 flex flex-col justify-between selection:bg-blue-100 selection:text-blue-900 relative">
-      {/* 局域网主动推送悬浮提示 */}
+      {/* 局域网主动推送悬浮提示 (全视口精准居中) */}
       {incomingToast && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-slate-900/90 backdrop-blur-md text-white px-4 py-2 rounded-xl text-xs font-medium shadow-xl border border-slate-700/60 flex items-center gap-2 animate-bounce">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span>{incomingToast}</span>
+        <div className="fixed top-5 inset-x-0 z-50 flex justify-center pointer-events-none px-4">
+          <div className="pointer-events-auto bg-slate-900/95 backdrop-blur-md text-white px-4 py-2.5 rounded-2xl text-xs font-medium shadow-2xl border border-slate-700/60 flex items-center gap-2.5 max-w-xl animate-fade-in transition-all">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <span className="truncate">{incomingToast}</span>
+            <button
+              type="button"
+              onClick={() => setIncomingToast(null)}
+              className="ml-1 p-0.5 text-slate-400 hover:text-white rounded-lg transition shrink-0 cursor-pointer"
+              title={t('records.close', '关闭')}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       )}
 

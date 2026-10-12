@@ -22,6 +22,7 @@ import {
   Maximize2,
   Layers,
   Images,
+  X,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ShareItem } from '@shared/types';
@@ -634,11 +635,21 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
         LightDrop · 极速局域网跨设备文件传输与共享服务
       </footer>
 
-      {/* 悬浮成功提示 */}
+      {/* 悬浮成功提示 (全视口精准居中) */}
       {downloadSuccessToast && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-slate-900/90 backdrop-blur-md text-white px-4 py-2 rounded-xl text-xs font-medium shadow-xl border border-slate-700/60 flex items-center gap-2 animate-bounce">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span>{downloadSuccessToast}</span>
+        <div className="fixed top-5 inset-x-0 z-50 flex justify-center pointer-events-none px-4">
+          <div className="pointer-events-auto bg-slate-900/95 backdrop-blur-md text-white px-4 py-2.5 rounded-2xl text-xs font-medium shadow-2xl border border-slate-700/60 flex items-center gap-2.5 max-w-xl animate-fade-in transition-all">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <span className="truncate">{downloadSuccessToast}</span>
+            <button
+              type="button"
+              onClick={() => setDownloadSuccessToast(null)}
+              className="ml-1 p-0.5 text-slate-400 hover:text-white rounded-lg transition shrink-0 cursor-pointer"
+              title={t('records.close', '关闭')}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       )}
 
