@@ -1,4 +1,5 @@
 import i18n from '../i18n';
+import { ShareItem } from '@shared/types';
 
 /**
  * 格式化字节大小为可读字符串 (如 1.2 KB, 246 MB)
@@ -125,4 +126,60 @@ export function isImageItem(
     return true;
   }
   return false;
+}
+
+/**
+ * 清除标题中附加的 (含x个附件) / (附件xxx) / （含x个附件） 等后缀
+ */
+export function stripAttachmentSuffix(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/\s*[\(（](?:含\s*\d+\s*个附件|附件[^\)）]*|含[^\)）]*附件)[\)）]/gi, '')
+    .trim();
+}
+
+/**
+ * 获取用于列表或卡片展示的标题：
+ * 1. 优先展示用户显式填写的 发送标题/描述 (customTitle)；
+ * 2. 没有填写则优先展示文本内容前 X 个字符（如有文本内容，不含“(含x个附件)”等后缀）；
+ * 3. 否则展示文件名、文件夹名或合辑文件名。
+ */
+export function getItemDisplayTitle(
+  item: ShareItem,
+  maxTextChars: number = 20
+): string {
+  if (!item) return '';
+
+  // 1. 优先显示 用户自定义标题/描述 (如果用户填写了)
+  if (item.customTitle && item.customTitle.trim()) {
+    return stripAttachmentSuffix(item.customTitle.trim());
+  }
+
+  // 2. 如果存在正文文本内容，优先展示文本前 X 个字 (去除 markdown 符号及换行，去除附件后缀)
+  if (item.content && item.content.trim()) {
+    const firstLine = item.content.split('\n')[0].replace(/^[#\s*-_>`~]+/, '').trim();
+    const cleanLine = stripAttachmentSuffix(firstLine.replace(/\s+/g, ' '));
+    if (cleanLine) {
+      return cleanLine.length > maxTextChars ? `${cleanLine.substring(0, maxTextChars)}...` : cleanLine;
+    }
+  }
+
+  // 3. 如果没有文本内容但存在合辑子文件，展示文件合辑概要
+  if (item.type === 'batch' && item.files && item.files.length > 0) {
+    if (item.files.length === 1) {
+      return stripAttachmentSuffix(item.files[0].name);
+    }
+    const firstFileName = item.files[0].name;
+    const isImg = item.isImageBatch;
+    return `${firstFileName} 等 ${item.files.length} 个${isImg ? '图片' : '文件'}`;
+  }
+
+  // 4. 展示单文件/单图片/文件夹的文件名或标题 (去除可能存留的附件后缀)
+  const candidate = item.fileName || item.title || '';
+  const cleaned = stripAttachmentSuffix(candidate);
+  if (cleaned) {
+    return cleaned;
+  }
+
+  return item.title || 'Item';
 }

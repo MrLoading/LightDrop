@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ShareItem, SystemStats } from '@shared/types';
-import { formatBytes, formatDisplayTime, getFileTypeLabel, isImageItem } from '../utils/format';
+import { formatBytes, formatDisplayTime, getFileTypeLabel, isImageItem, getItemDisplayTitle } from '../utils/format';
 import { PasswordModal } from './PasswordModal';
 import { TextMarkdownModal } from './TextMarkdownModal';
 import { ImageViewerModal } from './ImageViewerModal';
@@ -60,12 +60,9 @@ export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
     actionType: 'copy',
   });
 
-  // 发送文字内容，摘录前15个字符作为内容/文件名
+  // 获取条目在卡片中的展示标题
   const getTextDisplayTitle = (item: ShareItem): string => {
-    if (item.type !== 'text') return item.title || item.fileName || t('preview.unknownFile');
-    const raw = item.title || item.content || t('preview.quickText');
-    const oneLine = raw.replace(/\s+/g, ' ').trim();
-    return oneLine.length > 15 ? `${oneLine.substring(0, 15)}...` : oneLine;
+    return getItemDisplayTitle(item, 20);
   };
 
   // 获取图标配置
@@ -296,9 +293,9 @@ export const QuickPreviewCard: React.FC<QuickPreviewCardProps> = ({
                             }
                           }}
                           className="text-xs font-semibold text-slate-800 truncate cursor-pointer hover:text-blue-600"
-                          title={item.type === 'text' ? item.content || item.title : item.fileName || item.title}
+                          title={getTextDisplayTitle(item)}
                         >
-                          {item.type === 'text' ? getTextDisplayTitle(item) : item.fileName || item.title}
+                          {getTextDisplayTitle(item)}
                         </span>
 
                         {item.hasPassword && (

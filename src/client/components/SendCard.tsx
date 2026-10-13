@@ -49,14 +49,16 @@ interface SendCardProps {
     password?: string,
     onProgress?: (info: UploadProgressInfo) => void,
     setAbortHandle?: (abortFn: () => void) => void,
-    content?: string
+    content?: string,
+    title?: string
   ) => Promise<any>;
   onUploadFolder: (
     files: FileList,
     password?: string,
     onProgress?: (info: UploadProgressInfo) => void,
     setAbortHandle?: (abortFn: () => void) => void,
-    content?: string
+    content?: string,
+    title?: string
   ) => Promise<any>;
   onUploadMixedBatch: (
     individualFiles: File[],
@@ -64,7 +66,8 @@ interface SendCardProps {
     password?: string,
     onProgress?: (info: UploadProgressInfo) => void,
     setAbortHandle?: (abortFn: () => void) => void,
-    content?: string
+    content?: string,
+    title?: string
   ) => Promise<{ uploadedFilesCount: number; uploadedFoldersCount: number }>;
 }
 
@@ -74,6 +77,7 @@ export const SendCard: React.FC<SendCardProps> = ({
   onUploadMixedBatch,
 }) => {
   const { t } = useTranslation();
+  const [title, setTitle] = useState('');
   const [text, setText] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -246,10 +250,11 @@ export const SendCard: React.FC<SendCardProps> = ({
   const totalPendingItemsCount = pendingFiles.length + pendingFolders.length;
   const hasPending = totalPendingItemsCount > 0;
   const hasText = Boolean(text.trim());
+  const hasTitle = Boolean(title.trim());
 
   // 主发送 / 上传处理函数
   const handleSend = async () => {
-    if (!hasText && !hasPending) {
+    if (!hasText && !hasPending && !hasTitle) {
       showToast('error', t('send.toastEmpty'));
       return;
     }
@@ -258,6 +263,8 @@ export const SendCard: React.FC<SendCardProps> = ({
 
     try {
       setSubmitting(true);
+
+      const titleValue = hasTitle ? title.trim() : undefined;
 
       // 1. 若存在待上传的文件或文件夹，执行上传 (若同时输入了文字则作为正文合并上传)
       if (hasPending) {
@@ -279,7 +286,8 @@ export const SendCard: React.FC<SendCardProps> = ({
             (abortFn) => {
               abortRef.current = abortFn;
             },
-            textContent
+            textContent,
+            titleValue
           );
         } else {
           await onUploadFiles(
@@ -289,7 +297,8 @@ export const SendCard: React.FC<SendCardProps> = ({
             (abortFn) => {
               abortRef.current = abortFn;
             },
-            textContent
+            textContent,
+            titleValue
           );
         }
 
@@ -302,11 +311,16 @@ export const SendCard: React.FC<SendCardProps> = ({
         if (hasText) {
           setText('');
         }
-      } else if (hasText) {
-        // 2. 仅输入了文字，执行普通纯文本发送
+        if (hasTitle) {
+          setTitle('');
+        }
+      } else if (hasText || hasTitle) {
+        // 2. 纯文本发送 (若仅填写了标题未填正文，正文以标题填充)
         setSubmittingStatus(t('send.processing'));
-        await onSendText(text.trim(), undefined, currentPwd);
+        const textContent = text.trim() || title.trim();
+        await onSendText(textContent, titleValue, currentPwd);
         setText('');
+        setTitle('');
       }
 
       resetFormPassword();
@@ -820,6 +834,27 @@ export const SendCard: React.FC<SendCardProps> = ({
         </button>
       </div>
 
+      {/* 发送标题 / 描述输入框（可选，用于在列表中展示该标题） */}
+      <div className="mb-2.5">
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+              e.preventDefault();
+              if (!submitting && (hasText || hasPending || Boolean(title.trim()))) {
+                handleSend();
+              }
+            }
+          }}
+          placeholder={t('send.titleInputPlaceholder', '发送标题 / 描述（可选，用于在列表中展示该标题）')}
+          maxLength={100}
+          disabled={submitting}
+          className="w-full text-xs sm:text-sm px-3.5 py-2 bg-slate-50/60 hover:bg-slate-50 focus:bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-slate-700 placeholder-slate-400 transition disabled:opacity-50"
+        />
+      </div>
+
       {/* 文本输入框 */}
       <div className="relative mb-3">
         <textarea
@@ -828,7 +863,7 @@ export const SendCard: React.FC<SendCardProps> = ({
           onKeyDown={(e) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
               e.preventDefault();
-              if (!submitting && (hasText || hasPending)) {
+              if (!submitting && (hasText || hasPending || Boolean(title.trim()))) {
                 handleSend();
               }
             }

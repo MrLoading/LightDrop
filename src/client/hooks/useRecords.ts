@@ -82,13 +82,14 @@ export function useRecords() {
     return json.data as ShareItem;
   };
 
-  // 上传单个或多个文件 (带实时进度与取消支持，支持同时携带 Markdown 正文合并上传)
+  // 上传单个或多个文件 (带实时进度与取消支持，支持同时携带 Markdown 正文与发送标题合并上传)
   const uploadFiles = async (
     files: FileList | File[],
     password?: string,
     onProgress?: (info: UploadProgressInfo) => void,
     setAbortHandle?: (abortFn: () => void) => void,
-    content?: string
+    content?: string,
+    title?: string
   ) => {
     const formData = new FormData();
     for (let i = 0; i < files.length; i++) {
@@ -99,6 +100,9 @@ export function useRecords() {
     }
     if (content && content.trim()) {
       formData.append('content', content.trim());
+    }
+    if (title && title.trim()) {
+      formData.append('title', title.trim());
     }
     formData.append('nickname', getUserNickname());
 
@@ -117,13 +121,14 @@ export function useRecords() {
     }
   };
 
-  // 上传文件夹 (支持 input FileList 与可选密码，支持同时携带说明文本)
+  // 上传文件夹 (支持 input FileList 与可选密码，支持同时携带说明文本与发送标题)
   const uploadFolder = async (
     files: FileList,
     password?: string,
     onProgress?: (info: UploadProgressInfo) => void,
     setAbortHandle?: (abortFn: () => void) => void,
-    content?: string
+    content?: string,
+    title?: string
   ) => {
     const fileArray: File[] = [];
     const relativePaths: string[] = [];
@@ -142,7 +147,7 @@ export function useRecords() {
       relativePaths.push(files[i].webkitRelativePath || files[i].name);
     }
 
-    return uploadRawFolder(folderName, fileArray, relativePaths, password, onProgress, setAbortHandle, content);
+    return uploadRawFolder(folderName, fileArray, relativePaths, password, onProgress, setAbortHandle, content, title);
   };
 
   // 上传指定名称与相对路径结构的文件夹 (带实时进度与取消支持)
@@ -153,7 +158,8 @@ export function useRecords() {
     password?: string,
     onProgress?: (info: UploadProgressInfo) => void,
     setAbortHandle?: (abortFn: () => void) => void,
-    content?: string
+    content?: string,
+    title?: string
   ) => {
     const formData = new FormData();
     for (let i = 0; i < files.length; i++) {
@@ -166,6 +172,9 @@ export function useRecords() {
     }
     if (content && content.trim()) {
       formData.append('content', content.trim());
+    }
+    if (title && title.trim()) {
+      formData.append('title', title.trim());
     }
     formData.append('nickname', getUserNickname());
 
@@ -195,7 +204,8 @@ export function useRecords() {
     password?: string,
     onProgress?: (info: UploadProgressInfo) => void,
     setAbortHandle?: (abortFn: () => void) => void,
-    content?: string
+    content?: string,
+    title?: string
   ) => {
     let uploadedFilesCount = 0;
     let uploadedFoldersCount = 0;
@@ -207,7 +217,7 @@ export function useRecords() {
       });
     }
 
-    // 上传独立文件 (若有正文，附加到独立文件上传中)
+    // 上传独立文件 (若有正文或标题，附加到独立文件上传中)
     if (individualFiles.length > 0) {
       await uploadFiles(
         individualFiles,
@@ -216,15 +226,17 @@ export function useRecords() {
         (abort) => {
           currentAbort = abort;
         },
-        content
+        content,
+        title
       );
       uploadedFilesCount += individualFiles.length;
     }
 
-    // 上传每个文件夹 (若无独立文件且有正文，附加到首个文件夹中)
+    // 上传每个文件夹 (若无独立文件且有正文/标题，附加到首个文件夹中)
     for (let idx = 0; idx < folders.length; idx++) {
       const folder = folders[idx];
       const folderContent = individualFiles.length === 0 && idx === 0 ? content : undefined;
+      const folderTitle = individualFiles.length === 0 && idx === 0 ? title : undefined;
       await uploadRawFolder(
         folder.name,
         folder.files,
@@ -234,7 +246,8 @@ export function useRecords() {
         (abort) => {
           currentAbort = abort;
         },
-        folderContent
+        folderContent,
+        folderTitle
       );
       uploadedFoldersCount++;
     }

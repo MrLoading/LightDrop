@@ -26,7 +26,7 @@ import {
 import { marked } from 'marked';
 import { useTranslation } from 'react-i18next';
 import { ShareItem, BatchFileItem } from '@shared/types';
-import { formatBytes, formatDisplayTime, getFileTypeLabel, isImageItem } from '../utils/format';
+import { formatBytes, formatDisplayTime, getFileTypeLabel, isImageItem, getItemDisplayTitle } from '../utils/format';
 import { copyToClipboard } from '../utils/clipboard';
 import { ImageViewerModal } from './ImageViewerModal';
 import { FileQrModal } from './FileQrModal';
@@ -289,8 +289,8 @@ export const BatchViewerModal: React.FC<BatchViewerModalProps> = ({
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-base font-bold text-slate-800 tracking-tight truncate max-w-md sm:max-w-lg" title={item.title}>
-                    {item.title}
+                  <h3 className="text-base font-bold text-slate-800 tracking-tight truncate max-w-md sm:max-w-lg" title={getItemDisplayTitle(item)}>
+                    {getItemDisplayTitle(item)}
                   </h3>
                   <span
                     className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border ${

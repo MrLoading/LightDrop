@@ -22,6 +22,7 @@ export interface ShareItem {
   id: string;
   type: ShareItemType;
   title: string;          // 文本标题或文件名/文件夹名/合辑名称
+  customTitle?: string;   // 用户显式填写的发送标题/描述 (如有)
   content?: string;       // 针对文本类型：完整文本内容
   preview?: string;       // 针对文本类型：前100字符摘要或链接预览
   isUrl?: boolean;        // 是否是 URL 链接
