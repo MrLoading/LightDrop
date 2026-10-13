@@ -142,9 +142,26 @@ export const App: React.FC = () => {
         fetchStats();
       } else if (msg.type === 'SETTINGS_UPDATED' || msg.type === 'STATS_UPDATED') {
         fetchStats();
+      } else if (msg.type === 'NETWORK_CHANGED') {
+        fetchStats();
+        if (msg.payload?.newUrl) {
+          const notifyMsg = t('app.networkChangedToast', {
+            url: msg.payload.newUrl,
+            bonjourUrl: msg.payload.bonjourUrl,
+            defaultValue: `⚡ 局域网网络已切换！新访问地址: ${msg.payload.newUrl}`,
+          });
+          setIncomingToast(notifyMsg);
+          setTimeout(() => setIncomingToast(null), 5000);
+
+          sendDesktopNotification({
+            title: 'LightDrop · 网络与 IP 已切换',
+            body: `新访问地址: ${msg.payload.newUrl}\n稳定域名: ${msg.payload.bonjourUrl}`,
+            tag: `lightdrop_net_${Date.now()}`,
+          });
+        }
       }
     },
-    [fetchRecords, fetchStats]
+    [fetchRecords, fetchStats, t]
   );
 
   const { isConnected, onlineCount } = useWebSocket(handleWsMessage);
@@ -195,6 +212,36 @@ export const App: React.FC = () => {
           isRefreshing={isRefreshing}
           isConnected={isConnected}
         />
+
+        {/* 长连接断开智能重连与 IP 变动恢复条 */}
+        {!isConnected && (
+          <div className="mb-4 p-2.5 sm:p-3 bg-amber-50/90 border border-amber-200/80 rounded-2xl text-xs text-amber-800 flex items-center justify-between flex-wrap gap-2 animate-fade-in shadow-2xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+              <span className="font-medium">
+                {t('app.reconnectNotice', '与服务端的连接中断。若电脑切换了 Wi-Fi，IP 可能已变更。')}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {stats.bonjourUrl && (
+                <a
+                  href={stats.bonjourUrl}
+                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-xl font-medium transition text-[11px] shadow-xs flex items-center gap-1"
+                >
+                  <span>✨</span>
+                  <span>{t('app.reconnectLocalDomain', '尝试稳定域名 (.local) 重连')}</span>
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={() => setQrCodeOpen(true)}
+                className="px-2.5 py-1 bg-white border border-amber-200 text-amber-800 hover:bg-amber-100/60 rounded-xl font-medium transition text-[11px] cursor-pointer"
+              >
+                {t('header.scanQr', '重新扫码')}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* 上半部分：左侧发送内容，右侧快速预览与统计 */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-5 items-stretch">
@@ -256,12 +303,14 @@ export const App: React.FC = () => {
         }}
       />
 
-      {/* 手机扫码访问弹窗 (支持多网卡IP选择) */}
+      {/* 手机扫码访问弹窗 (支持多网卡IP选择与稳定域名切换) */}
       <QrCodeModal
         isOpen={qrCodeOpen}
         onClose={() => setQrCodeOpen(false)}
         accessUrl={activeUrl}
         ipList={stats.ipList || []}
+        bonjourUrl={stats.bonjourUrl}
+        bonjourHost={stats.bonjourHost}
         onSelectUrl={handleSelectDefaultUrl}
       />
 

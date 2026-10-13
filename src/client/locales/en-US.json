@@ -28,7 +28,9 @@
     "quickPickRole": "Quick pick SpongeBob character:",
     "clickToPick": "Click to select",
     "defaultNickname": "SpongeBob",
-    "nicknameNotice": "This nickname will be associated with your newly added files, operations, and shared records."
+    "nicknameNotice": "This nickname will be associated with your newly added files, operations, and shared records.",
+    "stableDomain": "Stable Domain",
+    "stableDomainTip": "Bonjour local domain: Address remains unchanged even when Wi-Fi switches"
   },
   "send": {
     "title": "Send Content",
@@ -394,7 +396,22 @@
     "loopback": "Loopback",
     "adminIps": "Authorized Admin IPs (comma-separated)",
     "adminIpsPlaceholder": "e.g. 192.168.1.50, 10.0.0.*",
-    "adminIpsTip": "To allow phones, tablets, or other LAN devices to manage server settings, enter their IPs here (supports wildcards like 192.168.1.*). Host IPs always have full admin access."
+    "adminIpsTip": "To allow phones, tablets, or other LAN devices to manage server settings, enter their IPs here (supports wildcards like 192.168.1.*). Host IPs always have full admin access.",
+    "networkDiscoveryTitle": "Network Discovery & IP Change Sync",
+    "networkDiscoverySubtitle": "Seamless solutions for mobile access when host Wi-Fi / IP changes",
+    "bonjourStableDomain": "Mac LAN Stable Domain (Bonjour)",
+    "bonjourDomainTip": "Based on mDNS protocol, supported natively by all Apple devices (iPhone/iPad/Mac) and modern Android devices. Domain stays unchanged after Wi-Fi switch.",
+    "macNotification": "macOS Native Desktop Notifications",
+    "macNotificationDesc": "Pop up a macOS banner notification on top-right screen when host network interfaces or IPs change.",
+    "webhookUrl": "Mobile Push Webhook / Bark URL (Optional)",
+    "webhookPlaceholder": "e.g. https://api.day.app/your_key or generic webhook URL",
+    "webhookTip": "Recommended with Bark iOS app: Enter your Bark URL, and your phone will receive instant push notifications with new clickable URLs when Mac Wi-Fi switches.",
+    "testWebhook": "Send Test Push",
+    "testingWebhook": "Sending...",
+    "testWebhookSuccess": "Test notification sent! Please check your phone.",
+    "testWebhookFailed": "Failed to send test push",
+    "udpDiscovery": "UDP LAN Auto-Discovery & Beacon",
+    "udpDiscoveryDesc": "Broadcast discovery beacon on UDP port 8089, supporting LAN scanning and iOS Shortcuts."
   },
   "footer": {
     "onlineVisitors": "Online Visitors",
@@ -405,13 +422,24 @@
   "qrModal": {
     "title": "Scan to Share Instantly",
     "subtitle": "Please ensure phone and computer are connected to the same Wi-Fi or LAN",
+    "tabStableDomain": "🌟 Stable LAN Domain (.local)",
+    "tabDirectIp": "⚡️ Physical Interface IP",
+    "stableDomainBadge": "🍎 Recommended for Mobile",
+    "stableDomainDesc": "Powered by Bonjour / mDNS protocol. Address stays valid regardless of Mac Wi-Fi switches. Bookmark or Add to Home Screen once and access forever!",
     "selectIp": "Select Device IP:",
     "detectedNics": "{{count}} network interfaces detected",
     "recommended": "Recommended",
     "cameraTip": "Scan directly with phone camera, browser, or WeChat",
     "copyLink": "Copy",
     "copied": "Copied",
-    "done": "Done & Close"
+    "done": "Done & Close",
+    "discoveryGuideTitle": "💡 How does mobile track service when host Wi-Fi switches?",
+    "guideTip1Title": "Method 1: Use Stable Local Domain (.local)",
+    "guideTip1Desc": "Scan using the recommended .local domain. No matter which Wi-Fi your Mac switches to, .local automatically resolves to the new IP.",
+    "guideTip2Title": "Method 2: macOS Native Notifications",
+    "guideTip2Desc": "When Wi-Fi switches on Mac, a desktop banner pops up showing current LAN IP and access URL immediately.",
+    "guideTip3Title": "Method 3: Mobile Push (Bark / Webhook)",
+    "guideTip3Desc": "Configure your Bark URL in Settings, and your phone will receive instant push notifications with new clickable URLs when Mac Wi-Fi switches."
   },
   "fileQrModal": {
     "titleText": "Text Direct Link QR Code",
@@ -535,7 +563,10 @@
   },
   "app": {
     "incomingToast": "Received new shared item: \"{{title}}\"",
-    "desktopIncomingTitle": "LightDrop · New item received"
+    "desktopIncomingTitle": "LightDrop · New item received",
+    "networkChangedToast": "⚡ LAN network switched! New access URL: {{url}} (Stable domain: {{bonjourUrl}})",
+    "reconnectLocalDomain": "Reconnect via Stable Domain (.local)",
+    "reconnectNotice": "Disconnected from server. IP might have changed if host switched Wi-Fi."
   },
   "format": {
     "today": "Today",

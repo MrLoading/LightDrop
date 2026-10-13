@@ -333,17 +333,29 @@ export const Header: React.FC<HeaderProps> = ({
                         className={`p-2 rounded-lg cursor-pointer transition flex items-center justify-between group ${
                           isSelected
                             ? 'bg-blue-50/80 text-blue-900 border border-blue-200/60'
+                            : item.isBonjour
+                            ? 'bg-purple-50/50 hover:bg-purple-50 text-slate-700 border border-purple-100/60'
                             : 'hover:bg-slate-50 text-slate-700'
                         }`}
-                        title={t('header.clickSetDefault')}
+                        title={item.isBonjour ? t('header.stableDomainTip') : t('header.clickSetDefault')}
                       >
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-mono text-[10px] px-1 py-0.2 rounded bg-slate-100 group-hover:bg-white text-slate-600 border border-slate-200">
-                              {item.name}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span
+                              className={`font-mono text-[10px] px-1 py-0.2 rounded border ${
+                                item.isBonjour
+                                  ? 'bg-purple-100 text-purple-700 border-purple-200 font-semibold'
+                                  : 'bg-slate-100 group-hover:bg-white text-slate-600 border-slate-200'
+                              }`}
+                            >
+                              {item.isBonjour ? 'mDNS' : item.name}
                             </span>
                             <span className="font-mono text-xs font-medium truncate">{item.ip}</span>
-                            {isSelected ? (
+                            {item.isBonjour ? (
+                              <span className="text-[9px] bg-purple-100 text-purple-800 font-bold px-1 rounded flex items-center gap-0.5">
+                                ✨ {t('header.stableDomain', '稳定域名')}
+                              </span>
+                            ) : isSelected ? (
                               <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1 rounded font-medium">
                                 {t('header.default')}
                               </span>

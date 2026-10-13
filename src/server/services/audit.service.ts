@@ -95,7 +95,7 @@ class AuditService {
     }
 
     // 2. 当前物理设备所拥有的所有网卡 IP（无论用户通过哪个网卡 IP 本机访问）
-    const localNetworkIps = getAllNetworkIps().map((item) => item.ip);
+    const localNetworkIps = getAllNetworkIps(8080, 'http', false).map((item) => item.ip);
     if (localNetworkIps.includes(clientIp)) {
       return true;
     }

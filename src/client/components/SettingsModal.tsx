@@ -16,6 +16,10 @@ import {
   Copy,
   Check,
   Shield,
+  Wifi,
+  Smartphone,
+  Radio,
+  Sparkles,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useSettings } from '../hooks/useSettings';
@@ -42,7 +46,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSettingsSaved,
 }) => {
   const { t } = useTranslation();
-  const { settings, loading, saving, saveSettings, validateDir, fetchSettings } = useSettings();
+  const { settings, loading, saving, saveSettings, validateDir, testWebhook, fetchSettings } = useSettings();
 
   const [language, setLanguage] = useState<'zh-CN' | 'en-US' | 'auto'>(() => getCurrentLanguageSetting());
   const [storageDir, setStorageDir] = useState('');
@@ -50,6 +54,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [autoCleanupDays, setAutoCleanupDays] = useState(0);
   const [adminIpsInput, setAdminIpsInput] = useState('');
   const [migrateData, setMigrateData] = useState(true);
+
+  // 网络发现与 IP 变动同步设置
+  const [enableMacNotification, setEnableMacNotification] = useState(true);
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [enableUdpDiscovery, setEnableUdpDiscovery] = useState(true);
+  const [testingWebhook, setTestingWebhook] = useState(false);
+  const [webhookStatus, setWebhookStatus] = useState<{ ok: boolean; message: string } | null>(null);
+  const [copiedBonjourUrl, setCopiedBonjourUrl] = useState(false);
 
   const [dirValidating, setDirValidating] = useState(false);
   const [dirStatus, setDirStatus] = useState<{ ok: boolean; message: string } | null>(null);
@@ -100,12 +112,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     });
   };
 
+  const handleTestWebhook = async () => {
+    if (!isAdmin || !webhookUrl.trim()) return;
+    try {
+      setTestingWebhook(true);
+      setWebhookStatus(null);
+      const res = await testWebhook(webhookUrl.trim());
+      if (res.success) {
+        setWebhookStatus({
+          ok: true,
+          message: res.message || t('settings.testWebhookSuccess', '测试通知已成功发送至您的手机！'),
+        });
+      } else {
+        setWebhookStatus({
+          ok: false,
+          message: res.error || t('settings.testWebhookFailed', '发送失败'),
+        });
+      }
+    } catch (e: any) {
+      setWebhookStatus({
+        ok: false,
+        message: e?.message || t('settings.testWebhookFailed', '发送失败'),
+      });
+    } finally {
+      setTestingWebhook(false);
+    }
+  };
+
   useEffect(() => {
     if (settings) {
       setStorageDir(settings.storageDir || './data');
       setMaxFileSizeMB(settings.maxFileSizeMB ?? 1024);
       setAutoCleanupDays(settings.autoCleanupDays ?? 0);
       setAdminIpsInput((settings.adminIps || []).join(', '));
+      setEnableMacNotification(settings.enableMacNotification ?? true);
+      setWebhookUrl(settings.webhookUrl || '');
+      setEnableUdpDiscovery(settings.enableUdpDiscovery ?? true);
     }
     if (isOpen) {
       setLanguage(getCurrentLanguageSetting());
@@ -160,6 +202,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           autoCleanupDays: Number(autoCleanupDays),
           migrateData,
           adminIps: parsedAdminIps,
+          enableMacNotification,
+          webhookUrl: webhookUrl.trim(),
+          enableUdpDiscovery,
         });
       }
 
@@ -609,6 +654,169 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
             )}
+
+            {/* ═══ 局域网发现与 IP 变动感知模块 ═══ */}
+            <div className="pt-2">
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200/60">
+                <span className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
+                  <Wifi className="w-4 h-4 text-blue-600" />
+                  {t('settings.networkDiscoveryTitle', '局域网发现与 IP 变动感知')}
+                </span>
+                <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200/60 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-purple-600" />
+                  {t('header.stableDomain', '稳定域名')}
+                </span>
+              </div>
+
+              {/* 稳定本地域名展示 */}
+              {settings.bonjourHost && (
+                <div className="mb-3 p-3 bg-gradient-to-r from-blue-50/70 to-purple-50/70 rounded-xl border border-purple-200/70 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-700 flex items-center gap-1.5 text-[11px]">
+                      <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                      {t('settings.bonjourStableDomain', 'Mac 局域网稳定域名 (Bonjour)')}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url =
+                          settings.bonjourUrl || `http://${settings.bonjourHost}:${settings.port}`;
+                        navigator.clipboard.writeText(url);
+                        setCopiedBonjourUrl(true);
+                        setTimeout(() => setCopiedBonjourUrl(false), 2000);
+                      }}
+                      className="px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300 text-[10px] transition flex items-center gap-1 cursor-pointer"
+                    >
+                      {copiedBonjourUrl ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-600" />
+                          <span className="text-emerald-600">已复制</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          <span>复制域名</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="bg-white p-2 rounded-lg border border-slate-200/80 font-mono text-[11px] text-purple-900 break-all select-all font-semibold flex items-center justify-between">
+                    <span>{settings.bonjourUrl || `http://${settings.bonjourHost}:${settings.port}`}</span>
+                    <span className="text-[9px] bg-purple-100 text-purple-800 font-sans px-1.5 py-0.2 rounded font-normal shrink-0 ml-1">
+                      🍎 手机首选
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 leading-relaxed">
+                    {t('settings.bonjourDomainTip')}
+                  </div>
+                </div>
+              )}
+
+              {/* 变动感知策略与推送配置 */}
+              <div className="bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80 space-y-3 mb-1">
+                {/* macOS 系统通知开关 */}
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={enableMacNotification}
+                    disabled={!isAdmin}
+                    onChange={(e) => setEnableMacNotification(e.target.checked)}
+                    className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                  />
+                  <div className="flex-1 text-xs">
+                    <span className="font-semibold text-slate-700 flex items-center gap-1">
+                      <Bell className="w-3.5 h-3.5 text-blue-600" />
+                      {t('settings.macNotification', 'macOS 原生桌面通知')}
+                    </span>
+                    <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                      {t(
+                        'settings.macNotificationDesc',
+                        '当 Mac 切换无线网、局域网 IP 发生变动时，在 Mac 屏幕右上角弹出系统通知横幅。'
+                      )}
+                    </p>
+                  </div>
+                </label>
+
+                {/* Webhook / Bark 手机推送 URL */}
+                <div className="space-y-1.5 pt-2 border-t border-slate-200/60">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                      <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
+                      {t('settings.webhookUrl', '手机推送 Webhook / Bark URL (可选)')}
+                    </label>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={handleTestWebhook}
+                        disabled={testingWebhook || !webhookUrl.trim()}
+                        className="px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 text-[10px] transition cursor-pointer disabled:opacity-40"
+                      >
+                        {testingWebhook
+                          ? t('settings.testingWebhook', '正在发送...')
+                          : t('settings.testWebhook', '发送测试推送')}
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={webhookUrl}
+                    disabled={!isAdmin}
+                    onChange={(e) => {
+                      setWebhookUrl(e.target.value);
+                      setWebhookStatus(null);
+                    }}
+                    placeholder={t(
+                      'settings.webhookPlaceholder',
+                      '例如: https://api.day.app/your_key 或通用 Webhook URL'
+                    )}
+                    className="w-full p-2 bg-white border border-slate-200 rounded-lg text-slate-700 font-mono focus:outline-none focus:border-blue-500 text-xs disabled:bg-slate-100 disabled:cursor-not-allowed"
+                  />
+                  {webhookStatus && (
+                    <div
+                      className={`text-[11px] flex items-center gap-1 ${
+                        webhookStatus.ok ? 'text-emerald-600' : 'text-rose-600'
+                      }`}
+                    >
+                      {webhookStatus.ok ? (
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                      ) : (
+                        <AlertCircle className="w-3.5 h-3.5" />
+                      )}
+                      {webhookStatus.message}
+                    </div>
+                  )}
+                  <p className="text-[10px] text-slate-400 leading-relaxed">
+                    {t(
+                      'settings.webhookTip',
+                      '推荐配合 iOS 开源神器 Bark App：填入 Bark URL 后，电脑切换网络时，手机将秒级收到新地址推送，点击通知直接在手机中打开。'
+                    )}
+                  </p>
+                </div>
+
+                {/* UDP 局域网自发现开关 */}
+                <label className="flex items-start gap-2.5 pt-2 border-t border-slate-200/60 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={enableUdpDiscovery}
+                    disabled={!isAdmin}
+                    onChange={(e) => setEnableUdpDiscovery(e.target.checked)}
+                    className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                  />
+                  <div className="flex-1 text-xs">
+                    <span className="font-semibold text-slate-700 flex items-center gap-1">
+                      <Radio className="w-3.5 h-3.5 text-blue-600" />
+                      {t('settings.udpDiscovery', 'UDP 局域网自发现与广播信标')}
+                    </span>
+                    <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                      {t(
+                        'settings.udpDiscoveryDesc',
+                        '开启 UDP 8089 端口广播，支持局域网设备自发现及 iOS 快捷指令一键扫描服务。'
+                      )}
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </div>
           </div>
         </form>
 

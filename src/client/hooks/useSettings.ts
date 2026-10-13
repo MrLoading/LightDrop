@@ -10,6 +10,8 @@ export interface ExtendedSettings extends SystemSettings {
   clientIp?: string;
   configFilePath?: string;
   deviceIps?: string[];
+  bonjourHost?: string;
+  bonjourUrl?: string;
 }
 
 export function useSettings() {
@@ -76,6 +78,16 @@ export function useSettings() {
     return json;
   };
 
+  const testWebhook = async (webhookUrl: string) => {
+    const res = await fetch('/api/settings/test-webhook', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ webhookUrl }),
+    });
+    const json = await res.json();
+    return json;
+  };
+
   return {
     settings,
     loading,
@@ -84,5 +96,6 @@ export function useSettings() {
     fetchSettings,
     saveSettings,
     validateDir,
+    testWebhook,
   };
 }

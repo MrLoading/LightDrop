@@ -7,7 +7,8 @@ import { storageService } from '../services/storage.service.js';
 import { wsService } from '../websocket/ws.server.js';
 import { cleanupService } from '../services/cleanup.service.js';
 import { auditService } from '../services/audit.service.js';
-import { getAllNetworkIps } from '../services/ip.service.js';
+import { getAllNetworkIps, getBonjourHost, getBonjourUrl, getLocalIpAddress } from '../services/ip.service.js';
+import { networkWatcherService } from '../services/network-watcher.service.js';
 
 export const settingsRouter: Router = Router();
 
@@ -20,7 +21,12 @@ settingsRouter.get('/', (req: Request, res: Response) => {
   const clientIp = auditService.getClientIp(req);
   const isAdmin = auditService.isAdmin(req);
   const configFilePath = configManager.getConfigFilePath();
-  const baseIps = ['127.0.0.1', ...getAllNetworkIps().map((item) => item.ip)];
+  const port = Number(process.env.PORT) || settings.port || 8080;
+  const bonjourHost = getBonjourHost();
+  const bonjourUrl = getBonjourUrl(port);
+
+  // 纯 IPv4 地址作为设备白名单
+  const baseIps = ['127.0.0.1', ...getAllNetworkIps(port, 'http', false).map((item) => item.ip)];
   if (fs.existsSync('/.dockerenv')) {
     baseIps.push('172.17.0.1');
   }
@@ -47,6 +53,8 @@ settingsRouter.get('/', (req: Request, res: Response) => {
       deviceIps,
       isWritable,
       storageSizeBytes: diskSizeBytes,
+      bonjourHost,
+      bonjourUrl,
     },
   });
 });
@@ -93,7 +101,18 @@ settingsRouter.post('/', (req: Request, res: Response) => {
     return;
   }
 
-  const { storageDir, maxFileSizeMB, autoCleanupDays, siteTitle, migrateData, adminIps } = req.body;
+  const {
+    storageDir,
+    maxFileSizeMB,
+    autoCleanupDays,
+    siteTitle,
+    migrateData,
+    adminIps,
+    notifyOnIpChange,
+    enableMacNotification,
+    webhookUrl,
+    enableUdpDiscovery,
+  } = req.body;
   const currentSettings = configManager.getSettings();
   const oldStorageDir = currentSettings.storageDir;
 
@@ -139,12 +158,22 @@ settingsRouter.post('/', (req: Request, res: Response) => {
     autoCleanupDays: typeof autoCleanupDays === 'number' ? autoCleanupDays : currentSettings.autoCleanupDays,
     siteTitle: typeof siteTitle === 'string' ? siteTitle.trim() : currentSettings.siteTitle,
     adminIps: updatedAdminIps,
+    notifyOnIpChange: typeof notifyOnIpChange === 'boolean' ? notifyOnIpChange : currentSettings.notifyOnIpChange,
+    enableMacNotification:
+      typeof enableMacNotification === 'boolean' ? enableMacNotification : currentSettings.enableMacNotification,
+    webhookUrl: typeof webhookUrl === 'string' ? webhookUrl.trim() : currentSettings.webhookUrl,
+    enableUdpDiscovery:
+      typeof enableUdpDiscovery === 'boolean' ? enableUdpDiscovery : currentSettings.enableUdpDiscovery,
   });
 
   const clientIp = auditService.getClientIp(req);
   const isAdmin = auditService.isAdmin(req);
   const configFilePath = configManager.getConfigFilePath();
-  const baseIps = ['127.0.0.1', ...getAllNetworkIps().map((item) => item.ip)];
+  const port = Number(process.env.PORT) || updated.port || 8080;
+  const bonjourHost = getBonjourHost();
+  const bonjourUrl = getBonjourUrl(port);
+
+  const baseIps = ['127.0.0.1', ...getAllNetworkIps(port, 'http', false).map((item) => item.ip)];
   if (fs.existsSync('/.dockerenv')) {
     baseIps.push('172.17.0.1');
   }
@@ -170,7 +199,47 @@ settingsRouter.post('/', (req: Request, res: Response) => {
       deviceIps,
       isWritable,
       storageSizeBytes: diskSizeBytes,
+      bonjourHost,
+      bonjourUrl,
     },
     message: '设置已成功保存并立即生效',
   });
+});
+
+/**
+ * 测试 Webhook / Bark 手机推送
+ */
+settingsRouter.post('/test-webhook', async (req: Request, res: Response) => {
+  if (!auditService.isAdmin(req)) {
+    res.status(403).json({
+      success: false,
+      error: '权限不足：仅限管理员测试远程推送通知',
+    });
+    return;
+  }
+
+  const { webhookUrl } = req.body;
+  if (!webhookUrl || typeof webhookUrl !== 'string' || !webhookUrl.trim()) {
+    res.status(400).json({ success: false, error: '请提供有效的 Webhook 或 Bark URL' });
+    return;
+  }
+
+  const settings = configManager.getSettings();
+  const port = Number(process.env.PORT) || settings.port || 8080;
+  const bonjourUrl = getBonjourUrl(port);
+  const localIp = getLocalIpAddress();
+  const directUrl = `http://${localIp}:${port}`;
+
+  const result = await networkWatcherService.sendWebhookNotification(
+    webhookUrl.trim(),
+    '⚡ LightDrop 推送测试',
+    `恭喜！您的设备已成功连通 LightDrop 局域网推送服务。\n稳定访问: ${bonjourUrl}`,
+    directUrl
+  );
+
+  if (result.success) {
+    res.json({ success: true, message: result.message || '测试通知已成功发送至您的手机' });
+  } else {
+    res.status(400).json({ success: false, error: result.message || '测试通知发送失败' });
+  }
 });

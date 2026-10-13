@@ -1,19 +1,90 @@
 import os from 'os';
+import { execSync } from 'child_process';
 import { NetworkIpInfo } from '../../shared/types.js';
+
+let cachedLocalHostName: string | null = null;
+let cachedLocalHostNameTime = 0;
+
+/**
+ * 获取设备在局域网中的 mDNS / Bonjour 广播主机名 (如 'loner-3')
+ * macOS 下优先获取系统的 LocalHostName，支持 .local 域名全网解析
+ */
+export function getLocalHostName(): string {
+  const now = Date.now();
+  // 缓存 30 秒，避免高频系统调用
+  if (cachedLocalHostName && now - cachedLocalHostNameTime < 30000) {
+    return cachedLocalHostName;
+  }
+
+  let hostName = '';
+
+  if (process.platform === 'darwin') {
+    try {
+      const output = execSync('scutil --get LocalHostName', {
+        encoding: 'utf8',
+        timeout: 1000,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      hostName = output.trim();
+    } catch (_) {
+      // 忽略错误，降级回退
+    }
+  }
+
+  if (!hostName) {
+    try {
+      hostName = os.hostname().replace(/\.local$/i, '').trim();
+    } catch (_) {}
+  }
+
+  // 兜底净化：移除非法主机名字符
+  hostName = hostName.replace(/[^\w-]/g, '') || 'localhost';
+
+  cachedLocalHostName = hostName;
+  cachedLocalHostNameTime = now;
+  return hostName;
+}
+
+/**
+ * 获取 Bonjour / mDNS 完整域名 (如 'loner-3.local')
+ */
+export function getBonjourHost(): string {
+  const name = getLocalHostName();
+  return name === 'localhost' ? 'localhost' : `${name}.local`;
+}
+
+/**
+ * 获取 Bonjour 完整访问地址 (如 'http://loner-3.local:8080')
+ */
+export function getBonjourUrl(port: number = 8080, protocol: string = 'http'): string {
+  return `${protocol}://${getBonjourHost()}:${port}`;
+}
 
 /**
  * 智能获取当前主机在局域网中的最佳 IPv4 地址
  */
 export function getLocalIpAddress(): string {
-  const allIps = getAllNetworkIps();
+  const allIps = getAllNetworkIps(8080, 'http', false);
   const defaultItem = allIps.find((item) => item.isDefault);
   return defaultItem ? defaultItem.ip : '127.0.0.1';
 }
 
 /**
- * 获取当前设备所有非回环真实 IPv4 地址列表
+ * 获取当前所有真实网卡的 IPv4 字符串签名 (用于低开销侦测网络变动)
  */
-export function getAllNetworkIps(port: number = 8080, protocol: string = 'http'): NetworkIpInfo[] {
+export function getNetworkSignature(): string {
+  const ips = getAllNetworkIps(8080, 'http', false).map((item) => item.ip);
+  return ips.sort().join('|');
+}
+
+/**
+ * 获取当前设备所有非回环真实 IPv4 地址列表，并可附带 Bonjour 稳定域名
+ */
+export function getAllNetworkIps(
+  port: number = 8080,
+  protocol: string = 'http',
+  includeBonjour: boolean = true
+): NetworkIpInfo[] {
   const interfaces = os.networkInterfaces();
   const candidates: { name: string; ip: string; priority: number }[] = [];
   const seenIps = new Set<string>();
@@ -68,21 +139,39 @@ export function getAllNetworkIps(port: number = 8080, protocol: string = 'http')
   // 按优先级降序排序
   candidates.sort((a, b) => b.priority - a.priority);
 
+  const result: NetworkIpInfo[] = [];
+
   if (candidates.length === 0) {
-    return [
-      {
-        name: 'localhost',
-        ip: '127.0.0.1',
-        url: `${protocol}://127.0.0.1:${port}`,
-        isDefault: true,
-      },
-    ];
+    result.push({
+      name: 'localhost',
+      ip: '127.0.0.1',
+      url: `${protocol}://127.0.0.1:${port}`,
+      isDefault: true,
+    });
+  } else {
+    candidates.forEach((item, index) => {
+      result.push({
+        name: item.name,
+        ip: item.ip,
+        url: `${protocol}://${item.ip}:${port}`,
+        isDefault: index === 0,
+      });
+    });
   }
 
-  return candidates.map((item, index) => ({
-    name: item.name,
-    ip: item.ip,
-    url: `${protocol}://${item.ip}:${port}`,
-    isDefault: index === 0,
-  }));
+  // 若需要包含 Bonjour 域名且非 localhost，添加至列表中
+  if (includeBonjour) {
+    const bonjourHost = getBonjourHost();
+    if (bonjourHost !== 'localhost') {
+      result.unshift({
+        name: 'bonjour (.local)',
+        ip: bonjourHost,
+        url: `${protocol}://${bonjourHost}:${port}`,
+        isDefault: false,
+        isBonjour: true,
+      });
+    }
+  }
+
+  return result;
 }
