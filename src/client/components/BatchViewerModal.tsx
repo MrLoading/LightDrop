@@ -26,10 +26,22 @@ import {
 import { marked } from 'marked';
 import { useTranslation } from 'react-i18next';
 import { ShareItem, BatchFileItem } from '@shared/types';
-import { formatBytes, formatDisplayTime, getFileTypeLabel, isImageItem, getItemDisplayTitle } from '../utils/format';
+import {
+  formatBytes,
+  formatDisplayTime,
+  getFileTypeLabel,
+  isImageItem,
+  isMarkdownItem,
+  isTextDocItem,
+  isPdfItem,
+  isDocPreviewable,
+  getItemDisplayTitle,
+} from '../utils/format';
 import { copyToClipboard } from '../utils/clipboard';
 import { ImageViewerModal } from './ImageViewerModal';
 import { FileQrModal } from './FileQrModal';
+import { PdfViewerModal } from './PdfViewerModal';
+import { TextMarkdownModal } from './TextMarkdownModal';
 import { getCharacterInfo, getDisplayNickname } from '../utils/nickname';
 
 export interface BatchViewerModalProps {
@@ -57,6 +69,8 @@ export const BatchViewerModal: React.FC<BatchViewerModalProps> = ({
   const [copiedFileId, setCopiedFileId] = useState<string | null>(null);
   const [copiedBatchLink, setCopiedBatchLink] = useState(false);
   const [selectedImage, setSelectedImage] = useState<ShareItem | null>(null);
+  const [selectedDoc, setSelectedDoc] = useState<ShareItem | null>(null);
+  const [selectedPdf, setSelectedPdf] = useState<ShareItem | null>(null);
   const [qrModalOpen, setQrModalOpen] = useState(false);
 
   // 正文说明展示状态与截断展开控制
@@ -206,6 +220,32 @@ export const BatchViewerModal: React.FC<BatchViewerModalProps> = ({
       batchParentId: item.id,
     } as any;
     setSelectedImage(target);
+  };
+
+  // 点击预览文档类子文件 (Markdown / 纯文本 / PDF)
+  const handlePreviewSubFile = (subFile: BatchFileItem) => {
+    if (!item) return;
+    const subShareItem: ShareItem = {
+      id: `${item.id}_${subFile.name}`,
+      type: 'file',
+      title: subFile.name,
+      fileName: subFile.name,
+      fileSize: subFile.size,
+      extension: subFile.extension || subFile.name.split('.').pop() || '',
+      mimeType: subFile.mimeType,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      permission: 'all_can_download',
+      downloadCount: 0,
+      password: effectivePassword,
+      batchParentId: item.id,
+    } as any;
+
+    if (isPdfItem(subFile)) {
+      setSelectedPdf(subShareItem);
+    } else if (isMarkdownItem(subFile) || isTextDocItem(subFile)) {
+      setSelectedDoc(subShareItem);
+    }
   };
 
   // 下载整个合辑 ZIP
@@ -610,9 +650,26 @@ export const BatchViewerModal: React.FC<BatchViewerModalProps> = ({
                         </>
                       ) : (
                         /* 非图片文件的卡片化展示 */
-                        <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-slate-100/70 transition">
-                          <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 mb-2">
-                            <File className="w-6 h-6" />
+                        <div
+                          className={`w-full h-full p-4 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-slate-100/70 transition ${
+                            isDocPreviewable(subFile) ? 'cursor-pointer' : ''
+                          }`}
+                          onClick={() => {
+                            if (isDocPreviewable(subFile)) {
+                              handlePreviewSubFile(subFile);
+                            }
+                          }}
+                        >
+                          <div
+                            className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-2 ${
+                              isPdfItem(subFile)
+                                ? 'bg-rose-50 border border-rose-100 text-rose-600'
+                                : isMarkdownItem(subFile) || isTextDocItem(subFile)
+                                ? 'bg-blue-50 border border-blue-100 text-blue-600'
+                                : 'bg-indigo-50 border border-indigo-100 text-indigo-600'
+                            }`}
+                          >
+                            <FileText className="w-6 h-6" />
                           </div>
                           <span className="text-xs font-semibold text-slate-800 line-clamp-2 max-w-full mb-1" title={subFile.name}>
                             {subFile.name}
@@ -620,14 +677,27 @@ export const BatchViewerModal: React.FC<BatchViewerModalProps> = ({
                           <span className="text-[11px] font-mono text-slate-400 mb-2">
                             {formatBytes(subFile.size)}
                           </span>
-                          <a
-                            href={getSubFileUrl(subFile.name, false)}
-                            download={subFile.name}
-                            className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-white border border-slate-200 text-xs font-medium text-slate-700 hover:text-blue-600 hover:border-blue-200 transition"
-                          >
-                            <Download className="w-3 h-3" />
-                            <span>{t('records.download', '下载')}</span>
-                          </a>
+                          <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            {isDocPreviewable(subFile) && (
+                              <button
+                                type="button"
+                                onClick={() => handlePreviewSubFile(subFile)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition active:scale-95"
+                                title={t('preview.view', '预览')}
+                              >
+                                <Eye className="w-3 h-3" />
+                                <span>{t('preview.view', '预览')}</span>
+                              </button>
+                            )}
+                            <a
+                              href={getSubFileUrl(subFile.name, false)}
+                              download={subFile.name}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs font-medium text-slate-700 hover:text-blue-600 hover:border-blue-200 transition"
+                            >
+                              <Download className="w-3 h-3" />
+                              <span>{t('records.download', '下载')}</span>
+                            </a>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -659,8 +729,16 @@ export const BatchViewerModal: React.FC<BatchViewerModalProps> = ({
                             onClick={() => handleOpenImageLightbox(subFile)}
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0 text-indigo-600">
-                            <File className="w-5 h-5" />
+                          <div
+                            className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${
+                              isPdfItem(subFile)
+                                ? 'bg-rose-50 border-rose-100 text-rose-600'
+                                : isMarkdownItem(subFile) || isTextDocItem(subFile)
+                                ? 'bg-blue-50 border-blue-100 text-blue-600'
+                                : 'bg-indigo-50 border-indigo-100 text-indigo-600'
+                            }`}
+                          >
+                            <FileText className="w-5 h-5" />
                           </div>
                         )}
 
@@ -670,9 +748,10 @@ export const BatchViewerModal: React.FC<BatchViewerModalProps> = ({
                             <span
                               onClick={() => {
                                 if (isImage) handleOpenImageLightbox(subFile);
+                                else if (isDocPreviewable(subFile)) handlePreviewSubFile(subFile);
                               }}
                               className={`text-xs font-semibold text-slate-800 truncate ${
-                                isImage ? 'cursor-pointer hover:text-blue-600' : ''
+                                isImage || isDocPreviewable(subFile) ? 'cursor-pointer hover:text-blue-600' : ''
                               }`}
                               title={subFile.name}
                             >
@@ -703,6 +782,17 @@ export const BatchViewerModal: React.FC<BatchViewerModalProps> = ({
                           >
                             <Eye className="w-3.5 h-3.5" />
                             <span className="hidden sm:inline">{t('records.preview', '预览')}</span>
+                          </button>
+                        )}
+                        {isDocPreviewable(subFile) && (
+                          <button
+                            type="button"
+                            onClick={() => handlePreviewSubFile(subFile)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 hover:border-blue-200 text-slate-600 hover:text-blue-600 hover:bg-blue-50/50 text-[11px] font-medium transition active:scale-95"
+                            title={t('preview.view', '预览')}
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">{t('preview.view', '预览')}</span>
                           </button>
                         )}
 
@@ -790,6 +880,27 @@ export const BatchViewerModal: React.FC<BatchViewerModalProps> = ({
           item={item}
           downloadUrl={getBatchViewUrl()}
           mode="view"
+        />
+      )}
+
+      {/* 文档 / Markdown 渲染弹窗 */}
+      {selectedDoc && (
+        <TextMarkdownModal
+          isOpen={Boolean(selectedDoc)}
+          onClose={() => setSelectedDoc(null)}
+          item={selectedDoc}
+          password={effectivePassword}
+        />
+      )}
+
+      {/* PDF 文件在线预览大弹窗 */}
+      {selectedPdf && (
+        <PdfViewerModal
+          isOpen={Boolean(selectedPdf)}
+          onClose={() => setSelectedPdf(null)}
+          item={selectedPdf}
+          password={effectivePassword}
+          currentAccessUrl={currentAccessUrl}
         />
       )}
     </>

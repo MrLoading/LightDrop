@@ -6,7 +6,7 @@ interface PasswordModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
-  actionType: 'copy' | 'download' | 'preview' | 'view_markdown' | 'view_image' | 'view_batch';
+  actionType: 'copy' | 'download' | 'preview' | 'view_markdown' | 'view_image' | 'view_batch' | 'view_pdf';
   onConfirm: (password: string) => Promise<boolean | void>;
 }
 
@@ -69,6 +69,8 @@ export const PasswordModal: React.FC<PasswordModalProps> = ({
       ? t('passwordModal.actionViewMarkdown')
       : actionType === 'view_image'
       ? t('passwordModal.actionViewImage')
+      : actionType === 'view_pdf'
+      ? t('passwordModal.actionViewPdf', '预览 PDF')
       : actionType === 'view_batch'
       ? t('records.view', '查看')
       : t('passwordModal.actionUnlock');

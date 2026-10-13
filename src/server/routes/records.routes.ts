@@ -565,11 +565,16 @@ recordsRouter.get('/:id/download', (req: Request, res: Response) => {
       return;
     }
 
+    const isInline = req.query.inline === 'true' || req.query.preview === 'true';
     const rawContent = item.content || item.preview || '';
     const safeTitle = (item.title || 'Note').replace(/[\\/:*?"<>|]/g, '_').trim();
     const fileName = encodeURIComponent(safeTitle.toLowerCase().endsWith('.md') ? safeTitle : `${safeTitle}.md`);
     res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"; filename*=UTF-8''${fileName}`);
+    if (isInline) {
+      res.setHeader('Content-Disposition', `inline; filename="${fileName}"; filename*=UTF-8''${fileName}`);
+    } else {
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"; filename*=UTF-8''${fileName}`);
+    }
     res.send(rawContent);
     return;
   }
@@ -588,8 +593,11 @@ recordsRouter.get('/:id/download', (req: Request, res: Response) => {
     if (path.resolve(subFilePath).startsWith(path.resolve(recordDir)) && fs.existsSync(subFilePath)) {
       const isInline = req.query.inline === 'true' || req.query.preview === 'true';
       const encodedName = encodeURIComponent(targetSubFileName);
-      const mimeType = mime.lookup(targetSubFileName) || 'application/octet-stream';
-      res.setHeader('Content-Type', mimeType.toString());
+      const mimeType = (mime.lookup(targetSubFileName) || 'application/octet-stream').toString();
+      const contentType = mimeType.startsWith('text/') || targetSubFileName.toLowerCase().endsWith('.md')
+        ? `${mimeType}; charset=utf-8`
+        : mimeType;
+      res.setHeader('Content-Type', contentType);
       if (isInline) {
         res.setHeader('Content-Disposition', `inline; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
       } else {
@@ -608,15 +616,38 @@ recordsRouter.get('/:id/download', (req: Request, res: Response) => {
     return;
   }
 
+  const isInline = req.query.inline === 'true' || req.query.preview === 'true';
   const targetFile = path.join(recordDir, item.fileName || item.title);
   if (fs.existsSync(targetFile)) {
-    const encodedName = encodeURIComponent(item.fileName || item.title);
-    res.setHeader('Content-Disposition', `attachment; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
+    const rawName = item.fileName || item.title;
+    const encodedName = encodeURIComponent(rawName);
+    const mimeType = (mime.lookup(rawName) || 'application/octet-stream').toString();
+    const contentType = mimeType.startsWith('text/') || rawName.toLowerCase().endsWith('.md')
+      ? `${mimeType}; charset=utf-8`
+      : mimeType;
+    res.setHeader('Content-Type', contentType);
+    if (isInline) {
+      res.setHeader('Content-Disposition', `inline; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
+    } else {
+      res.setHeader('Content-Disposition', `attachment; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
+    }
     res.sendFile(targetFile);
   } else {
     const files = fs.readdirSync(recordDir);
     if (files.length > 0) {
-      res.download(path.join(recordDir, files[0]));
+      const fallbackFile = files[0];
+      const encodedName = encodeURIComponent(fallbackFile);
+      const mimeType = (mime.lookup(fallbackFile) || 'application/octet-stream').toString();
+      const contentType = mimeType.startsWith('text/') || fallbackFile.toLowerCase().endsWith('.md')
+        ? `${mimeType}; charset=utf-8`
+        : mimeType;
+      res.setHeader('Content-Type', contentType);
+      if (isInline) {
+        res.setHeader('Content-Disposition', `inline; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
+      } else {
+        res.setHeader('Content-Disposition', `attachment; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
+      }
+      res.sendFile(path.join(recordDir, fallbackFile));
     } else {
       res.status(404).json({ success: false, error: '文件已丢失' });
     }
