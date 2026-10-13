@@ -52,10 +52,11 @@ export interface ShareItem {
  * 网络接口与 IP 信息
  */
 export interface NetworkIpInfo {
-  name: string;        // 网卡接口名称，如 'en0', 'en5'
-  ip: string;          // IPv4 地址，如 '192.168.206.146'
+  name: string;        // 网卡接口名称，如 'en0', 'en5' 或 'bonjour'
+  ip: string;          // IPv4 地址或局域网主机名
   url: string;         // 完整访问地址，如 'http://192.168.206.146:8080'
   isDefault: boolean;  // 是否为系统推荐的默认IP
+  isBonjour?: boolean; // 是否为 mDNS / Bonjour 局域网稳定域名 (.local)
 }
 
 /**
@@ -75,6 +76,10 @@ export interface SystemStats {
   uptimeSeconds: number;
   ipList?: NetworkIpInfo[];
   defaultUrl?: string;
+  bonjourHost?: string;        // 如 'loner-3.local'
+  bonjourUrl?: string;         // 如 'http://loner-3.local:8080'
+  localHostName?: string;      // 本地主机名
+  udpDiscoveryPort?: number;   // UDP 发现服务端口
 }
 
 /**
@@ -88,6 +93,23 @@ export interface SystemSettings {
   allowAnonymousDelete: boolean;// 是否允许访客删除记录
   siteTitle: string;            // 站点标题
   adminIps?: string[];          // 允许修改服务器配置的管理员 IP 列表
+  notifyOnIpChange?: boolean;   // IP 变动时是否广播/通知 (默认 true)
+  enableMacNotification?: boolean; // 是否启用 macOS 原生桌面通知 (默认 true)
+  webhookUrl?: string;          // 手机推送 Webhook / Bark URL (可选)
+  enableUdpDiscovery?: boolean; // 是否启用 UDP 局域网广播发现 (默认 true)
+}
+
+/**
+ * 网络变更事件负载
+ */
+export interface NetworkChangePayload {
+  oldIp?: string;
+  newIp: string;
+  oldUrl?: string;
+  newUrl: string;
+  bonjourUrl: string;
+  ipList: NetworkIpInfo[];
+  timestamp: string;
 }
 
 /**
@@ -112,7 +134,8 @@ export type WsEventType =
   | 'ONLINE_COUNT_CHANGED'
   | 'SETTINGS_UPDATED'
   | 'STATS_UPDATED'
-  | 'AUDIT_LOGS_UPDATED';
+  | 'AUDIT_LOGS_UPDATED'
+  | 'NETWORK_CHANGED';
 
 export interface WsMessage<T = any> {
   type: WsEventType;

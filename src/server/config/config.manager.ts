@@ -213,6 +213,10 @@ class ConfigManager extends EventEmitter {
       autoCleanupDays: settings.autoCleanupDays,
       siteTitle: settings.siteTitle,
       adminIps: settings.adminIps || [],
+      notifyOnIpChange: settings.notifyOnIpChange ?? true,
+      enableMacNotification: settings.enableMacNotification ?? true,
+      webhookUrl: settings.webhookUrl || '',
+      enableUdpDiscovery: settings.enableUdpDiscovery ?? true,
     };
     const dir = path.dirname(this.configFilePath);
     if (!fs.existsSync(dir)) {

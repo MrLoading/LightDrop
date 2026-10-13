@@ -1,6 +1,7 @@
 import { SystemSettings } from './types.js';
 
 export const DEFAULT_PORT = 8080;
+export const DEFAULT_UDP_PORT = 8089;
 
 export const DEFAULT_SETTINGS: SystemSettings = {
   storageDir: './data',
@@ -10,6 +11,10 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   allowAnonymousDelete: true,
   siteTitle: 'LightDrop',
   adminIps: [],
+  notifyOnIpChange: true,
+  enableMacNotification: true,
+  webhookUrl: '',
+  enableUdpDiscovery: true,
 };
 
 export const STORAGE_FILES_DIRNAME = 'files';

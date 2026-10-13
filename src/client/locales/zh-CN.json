@@ -28,7 +28,9 @@
     "quickPickRole": "海绵宝宝角色快速选择：",
     "clickToPick": "点击即选",
     "defaultNickname": "海绵宝宝",
-    "nicknameNotice": "该昵称将关联于您发送的新增文件、操作记录以及共享记录中。"
+    "nicknameNotice": "该昵称将关联于您发送的新增文件、操作记录以及共享记录中。",
+    "stableDomain": "稳定域名",
+    "stableDomainTip": "Bonjour 局域网稳定域名：即使电脑切换 Wi-Fi，地址也无需更改"
   },
   "send": {
     "title": "发送内容",
@@ -394,7 +396,22 @@
     "loopback": "本机回环",
     "adminIps": "管理员 IP 列表 (以逗号分隔)",
     "adminIpsPlaceholder": "例如: 192.168.1.50, 10.0.0.*",
-    "adminIpsTip": "若需允许手机、平板或其他局域网电脑管理服务器配置，可在此填入其 IP（支持通配符如 192.168.1.*）。本机所有网卡 IP 始终具备最高管理权限。"
+    "adminIpsTip": "若需允许手机、平板或其他局域网电脑管理服务器配置，可在此填入其 IP（支持通配符如 192.168.1.*）。本机所有网卡 IP 始终具备最高管理权限。",
+    "networkDiscoveryTitle": "局域网发现与 IP 变动感知",
+    "networkDiscoverySubtitle": "解决主机切换 Wi-Fi 后手机与多端感知、无感访问的完整配套方案",
+    "bonjourStableDomain": "局域网稳定本地域名 (mDNS / Bonjour)",
+    "bonjourDomainTip": "基于 mDNS 协议。iOS / macOS、Windows 10/11 及现代 Android / Linux 原生支持解析。电脑 Wi-Fi 切换后域名保持不变，手机可直接添加为书签或主屏幕图标。",
+    "macNotification": "宿主机系统桌面通知 (macOS / Windows / Linux)",
+    "macNotificationDesc": "当电脑切换无线网、局域网 IP 发生变动时，在屏幕角落弹出系统原生通知横幅。",
+    "webhookUrl": "手机推送 Webhook / Bark URL (可选)",
+    "webhookPlaceholder": "例如: https://api.day.app/your_key 或通用 Webhook URL",
+    "webhookTip": "推荐配合 iOS 开源神器 Bark App：填入 Bark URL 后，电脑切换网络时，手机将秒级收到新地址推送，点击通知直接在手机中打开。",
+    "testWebhook": "发送测试推送",
+    "testingWebhook": "正在发送...",
+    "testWebhookSuccess": "测试通知已成功发送至您的手机！",
+    "testWebhookFailed": "发送失败",
+    "udpDiscovery": "UDP 局域网自发现与广播信标",
+    "udpDiscoveryDesc": "开启 UDP 8089 端口广播，支持局域网设备自发现及 iOS 快捷指令一键扫描服务。"
   },
   "footer": {
     "onlineVisitors": "在线访问者",
@@ -405,13 +422,25 @@
   "qrModal": {
     "title": "手机扫码极速互传",
     "subtitle": "请确保手机与电脑连接至同一 Wi-Fi 或局域网段",
+    "tabStableDomain": "🌟 稳定本地域名 (.local 推荐)",
+    "tabDirectIp": "⚡️ 物理网卡直接 IP",
+    "stableDomainBadge": "🍎 手机首选 · 免换IP",
+    "stableDomainDesc": "通过 Bonjour / mDNS 局域网协议，无论当前电脑切换哪个 Wi-Fi，手机访问该域名均自动解析最新 IP。手机添加到主屏幕/书签后无需重复扫码！",
     "selectIp": "选择扫码访问的设备 IP：",
     "detectedNics": "检测到 {{count}} 个非回环网卡",
     "recommended": "推荐",
     "cameraTip": "支持手机原生相机 / 微信 / 浏览器直接扫码",
     "copyLink": "复制",
     "copied": "已复制",
-    "done": "完成并关闭"
+    "done": "完成并关闭",
+    "close": "关闭",
+    "discoveryGuideTitle": "💡 电脑 Wi-Fi 切换后，手机如何快速感知？",
+    "guideTip1Title": "方案 1：使用稳定域名 (.local)",
+    "guideTip1Desc": "手机使用本页面推荐的 .local 稳定域名。Mac 无论切换哪个 Wi-Fi，.local 域名均自动解析到新 IP，手机直接访问永久有效。",
+    "guideTip2Title": "方案 2：Mac 原生桌面通知",
+    "guideTip2Desc": "电脑切换 Wi-Fi 时，Mac 右上角会自动弹出系统通知，清晰显示当前最新局域网 IP 与访问地址。",
+    "guideTip3Title": "方案 3：手机实时推送 (Bark / Webhook)",
+    "guideTip3Desc": "在设置中心填入 Bark URL，电脑切换 Wi-Fi 时手机将即刻收到通知横幅，点击通知直接在手机浏览器中打开最新服务。"
   },
   "fileQrModal": {
     "titleText": "文本专属直链二维码",
@@ -535,7 +564,10 @@
   },
   "app": {
     "incomingToast": "接收到新共享内容: 「{{title}}」",
-    "desktopIncomingTitle": "LightDrop · 接收到新共享内容"
+    "desktopIncomingTitle": "LightDrop · 接收到新共享内容",
+    "networkChangedToast": "⚡ 局域网网络已切换！新访问地址: {{url}} (稳定域名: {{bonjourUrl}})",
+    "reconnectLocalDomain": "尝试稳定域名 (.local) 重连",
+    "reconnectNotice": "与服务端的连接中断。若电脑切换了 Wi-Fi，IP 可能已变更。"
   },
   "format": {
     "today": "今天",
