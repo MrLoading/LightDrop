@@ -37,6 +37,7 @@
 - [📐 Architecture & Tech Stack](#-architecture--tech-stack)
 - [📦 DevOps Tooling](#-devops-tooling)
 - [⚙️ Configuration & Data Persistence](#️-configuration--data-persistence)
+- [🛡️ Network Safety & Enterprise Security](#️-network-safety--enterprise-security)
 - [❓ Frequently Asked Questions (FAQ)](#-frequently-asked-questions-faq)
 - [🤝 Contributing](#-contributing)
 - [📄 License](#-license)
@@ -107,6 +108,12 @@ Transferring files and text snippets between diverse devices on a local network 
 ### 9. 📱 Progressive Web App (PWA) Experience
 - Fully compliant with Web App Manifest and Workbox Service Worker specifications;
 - Supports "Add to Home Screen" on mobile and "Install App" on desktop Chrome/Edge for standalone window execution.
+
+### 10. 🌐 LAN IP Change Self-Healing & Stable Domain Discovery
+- **Bonjour / mDNS Stable Local Domain**: Automatically generates `http://<hostname>.local:8080`. No matter how many times the host laptop switches Wi-Fi networks or how often the local IP changes, mobile devices bookmarking or adding this domain to Home Screen **never need to rescan the QR code**—system mDNS transparently resolves to the newest physical IP in sub-seconds;
+- **Cross-Platform Native Desktop Notifications**: When the host machine connects to a new network, a native desktop notification pops up immediately (macOS Notification Center, Windows PowerShell Toast/Balloon, Linux `notify-send`) displaying the latest LAN IP and web link;
+- **Real-Time Mobile Push Notifications (Bark / Webhook)**: Configure your iOS Bark Key or custom Webhook in Settings; your phone receives instant push alerts with clickable URLs whenever host Wi-Fi changes;
+- **UDP Discovery Beacon & Disconnect Self-Healing**: Includes an ultra-lightweight UDP 8089 discovery beacon and WebSocket `NETWORK_CHANGED` broadcast, enabling clients to silently detect IP shifts and auto-reconnect without user intervention.
 
 ---
 
@@ -255,6 +262,27 @@ Optionally configure via a `.env` file:
 
 ---
 
+## 🛡️ Network Safety & Enterprise Security
+
+Many local network utilities generate unintended packet chatter, triggering IT security alarms or disrupting corporate and campus Wi-Fi networks. LightDrop adheres strictly to **event-driven, unidirectional, low-frequency, zero-pollution** network design principles:
+
+### 1. Absolute Immunity to Broadcast Storms (Zero Storm Risk)
+- **Pure Event-Driven (Zero Continuous Polling/Timers)**: The backend contains **no repeating broadcast timer loop**. Single UDP beacon packets are triggered strictly upon initial server boot and physical network interface transition events. Under ordinary standby, outgoing broadcast packet count is strictly **0**;
+- **Tiny Payloads (~300 Bytes per packet)**: Each announcement transmission finishes in < 0.1ms, equivalent to an ordinary ARP address resolution packet;
+- **No Relay or Amplification**: Recipient clients merely update their local memory state and never rebroadcast or relay packets, physically preventing any broadcast loops or cascading storm conditions.
+
+### 2. Link-Local Scope & Corporate VLAN Isolation
+- **mDNS Multicast Confined to Layer 2**: Bonjour / mDNS multicast (`224.0.0.251:5353`) enforces TTL=1, bounding packets strictly to the current physical subnet/VLAN. Enterprise L3 switches and core routers never route link-local multicasts across departments or into internal server subnets;
+- **Fully Compatible with AP Isolation (Client Isolation)**: In enterprise Wi-Fi environments enforcing Client Isolation, wireless APs silently drop client-to-client discovery probes over the air. LightDrop operations gracefully degrade without triggering network security alerts.
+
+### 3. Strict Enterprise Compliance Mode (One-Click UDP Disabling)
+If your enterprise IT, EDR, or SIEM security policy strictly forbids unauthenticated UDP port beacons:
+- Navigate to **Settings -> LAN Discovery & IP Change Tracking**;
+- Toggle **"Enable UDP LAN Discovery"** to **Off**. The server immediately terminates and releases the UDP port 8089 socket (`socket.close()`), ceasing all UDP packet transmission and reception;
+- File sharing, `.local` domain access, QR scanning, and Bark/Webhook notifications remain 100% functional even with UDP disabled.
+
+---
+
 ## ❓ Frequently Asked Questions (FAQ)
 
 <details>
@@ -263,6 +291,24 @@ Optionally configure via a `.env` file:
 1. Ensure the mobile device is on the **same Wi-Fi / subnet** as the host computer;
 2. Verify that host firewall rules allow inbound traffic on port `8080`;
 3. If virtual adapters (VPN, VM bridges) are active, switch to your physical Wi-Fi IPv4 address using the top IP dropdown.
+</details>
+
+<details>
+<summary><strong>Q: When host Wi-Fi changes, how can mobile devices track and access the service quickest?</strong></summary>
+
+LightDrop provides 3 instantaneous tracking and self-healing mechanisms:
+1. **Stable Local Domain (Recommended)**: Use the `http://<hostname>.local:8080` stable address from the QR modal and tap "Add to Home Screen" or bookmark it. No matter which Wi-Fi your computer joins, system-level mDNS transparently resolves to the newest physical IP in sub-seconds—zero rescanning required;
+2. **Native Desktop Notifications**: When Wi-Fi changes, macOS / Windows / Linux displays an instant desktop notification banner showing the new IP and URL;
+3. **Real-Time Mobile Push**: Configure your iOS Bark URL in Settings. Your phone receives instant push notifications with one-tap access URLs the moment your computer switches networks.
+</details>
+
+<details>
+<summary><strong>Q: Will UDP broadcasts or multicasts trigger broadcast storms on a corporate network?</strong></summary>
+
+Definitely not.
+1. LightDrop contains zero periodic broadcast loops—it dispatches a single ~300-byte packet only upon physical network changes, which is orders of magnitude quieter than built-in OS background network activity (ARP, DHCP, AirDrop);
+2. mDNS multicast uses TTL=1 and is never routed across corporate L3 switches/VLANs;
+3. If your company enforces strict zero-broadcast compliance policies, you can disable UDP completely with a single toggle in Settings.
 </details>
 
 <details>
