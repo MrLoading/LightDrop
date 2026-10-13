@@ -26,10 +26,21 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ShareItem } from '@shared/types';
-import { formatBytes, formatDisplayTime, getFileTypeLabel, isImageItem } from '../utils/format';
+import {
+  formatBytes,
+  formatDisplayTime,
+  getFileTypeLabel,
+  isImageItem,
+  isMarkdownItem,
+  isTextDocItem,
+  isPdfItem,
+  isDocPreviewable,
+} from '../utils/format';
 import { copyToClipboard } from '../utils/clipboard';
 import { TextReaderView } from './TextReaderView';
+import { TextMarkdownModal } from './TextMarkdownModal';
 import { ImageViewerModal } from './ImageViewerModal';
+import { PdfViewerModal } from './PdfViewerModal';
 import { DownloadModal } from './DownloadModal';
 import { BatchViewerModal } from './BatchViewerModal';
 import { getUserNickname, getCharacterInfo, getDisplayNickname } from '../utils/nickname';
@@ -65,7 +76,9 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
 
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [unlockedContent, setUnlockedContent] = useState<string>('');
-  const [showImageViewerModal, setShowImageViewerModal] = useState(true);
+  const [showImageViewerModal, setShowImageViewerModal] = useState(isViewMode);
+  const [showDocModal, setShowDocModal] = useState(isViewMode);
+  const [showPdfModal, setShowPdfModal] = useState(isViewMode);
   const [downloadTriggered, setDownloadTriggered] = useState(false);
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
   const [downloadSuccessToast, setDownloadSuccessToast] = useState<string | null>(null);
@@ -171,6 +184,10 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
         }
       } else if (isImageItem(record) && isViewMode) {
         setShowImageViewerModal(true);
+      } else if ((isMarkdownItem(record) || isTextDocItem(record)) && isViewMode) {
+        setShowDocModal(true);
+      } else if (isPdfItem(record) && isViewMode) {
+        setShowPdfModal(true);
       } else {
         // 自动弹出下载目录确认与下载弹窗
         setDownloadModalOpen(true);
@@ -259,6 +276,22 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
       );
     }
 
+    if (isPdfItem(record)) {
+      return (
+        <div className="w-14 h-14 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 shadow-sm border border-rose-200/50">
+          <FileText className="w-7 h-7" />
+        </div>
+      );
+    }
+
+    if (isMarkdownItem(record) || isTextDocItem(record)) {
+      return (
+        <div className="w-14 h-14 rounded-2xl bg-sky-100 text-sky-600 flex items-center justify-center shrink-0 shadow-sm border border-sky-200/50">
+          <FileText className="w-7 h-7" />
+        </div>
+      );
+    }
+
     const ext = (record.extension || '').toLowerCase();
     if (['ts', 'js', 'py', 'java', 'html', 'json'].includes(ext)) {
       return (
@@ -298,6 +331,7 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
           <TextReaderView
             item={record}
             customContent={unlockedContent || record.content}
+            password={password}
             onClose={handleGoHome}
             isStandalone
           />
@@ -339,6 +373,48 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
           if (!ok) throw new Error('密码错误');
           return unlockedContent || pwd;
         }}
+      />
+    );
+  }
+
+  // 场景 D: Markdown/TXT 文档类型且处于查看模式且已解锁 (或无需密码) -> 渲染统一阅读器
+  if (
+    record &&
+    (isMarkdownItem(record) || isTextDocItem(record)) &&
+    isViewMode &&
+    (!record.hasPassword || isUnlocked) &&
+    showDocModal
+  ) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-[#f0f4f9] animate-fade-in">
+        <div className="bg-white rounded-2xl w-full max-w-4xl lg:max-w-5xl shadow-2xl border border-slate-200/90 flex flex-col h-[94vh] sm:h-[85vh] overflow-hidden animate-scale-in">
+          <TextReaderView
+            item={record}
+            customContent={unlockedContent || record.content}
+            password={password}
+            onClose={() => setShowDocModal(false)}
+            isStandalone
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // 场景 E: PDF 文档类型且处于查看模式且已解锁 (或无需密码) -> 渲染 PDF 预览器
+  if (
+    record &&
+    isPdfItem(record) &&
+    isViewMode &&
+    (!record.hasPassword || isUnlocked) &&
+    showPdfModal
+  ) {
+    return (
+      <PdfViewerModal
+        isOpen={showPdfModal}
+        onClose={() => setShowPdfModal(false)}
+        item={record}
+        password={password}
+        onDownload={() => triggerFileDownload(password)}
       />
     );
   }
@@ -485,6 +561,12 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
                     ? `${record.isImageBatch ? t('records.typeImageBatch', '图片合辑') : t('records.typeBatch', '文件合辑')} (${record.files?.length || 0} 个文件)`
                     : record.type === 'text'
                     ? '纯文本'
+                    : isPdfItem(record)
+                    ? t('preview.typePdf', 'PDF 文档')
+                    : isMarkdownItem(record)
+                    ? t('preview.typeMarkdown', 'Markdown 文档')
+                    : isTextDocItem(record)
+                    ? t('preview.typeTxt', '文本文档')
                     : getFileTypeLabel(record.fileName, record.extension)}
                 </span>
               </div>
@@ -508,6 +590,24 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
                   >
                     <Eye className="w-4 h-4" />
                     <span>{t('downloadPage.viewFullscreenImage', '全屏查看图片')}</span>
+                  </button>
+                )}
+                {(isMarkdownItem(record) || isTextDocItem(record)) && (
+                  <button
+                    onClick={() => setShowDocModal(true)}
+                    className="w-full py-2.5 rounded-2xl bg-blue-50 hover:bg-blue-100/90 text-blue-700 font-semibold text-xs border border-blue-200/80 shadow-2xs transition active:scale-98 flex items-center justify-center gap-2"
+                  >
+                    <Eye className="w-4 h-4" />
+                    <span>{t('preview.clickToViewDoc', '在线阅读文档')}</span>
+                  </button>
+                )}
+                {isPdfItem(record) && (
+                  <button
+                    onClick={() => setShowPdfModal(true)}
+                    className="w-full py-2.5 rounded-2xl bg-rose-50 hover:bg-rose-100/90 text-rose-700 font-semibold text-xs border border-rose-200/80 shadow-2xs transition active:scale-98 flex items-center justify-center gap-2"
+                  >
+                    <Eye className="w-4 h-4" />
+                    <span>{t('preview.viewPdf', '在线预览 PDF')}</span>
                   </button>
                 )}
                 <button
@@ -545,6 +645,24 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
                       <span>{t('downloadPage.viewFullscreenImage', '全屏查看图片')}</span>
                     </button>
                   )}
+                  {(isMarkdownItem(record) || isTextDocItem(record)) && (
+                    <button
+                      onClick={() => setShowDocModal(true)}
+                      className="w-full py-2.5 rounded-2xl bg-blue-50 hover:bg-blue-100/90 text-blue-700 font-semibold text-xs border border-blue-200/80 shadow-2xs transition active:scale-98 flex items-center justify-center gap-2"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span>{t('preview.clickToViewDoc', '在线阅读文档')}</span>
+                    </button>
+                  )}
+                  {isPdfItem(record) && (
+                    <button
+                      onClick={() => setShowPdfModal(true)}
+                      className="w-full py-2.5 rounded-2xl bg-rose-50 hover:bg-rose-100/90 text-rose-700 font-semibold text-xs border border-rose-200/80 shadow-2xs transition active:scale-98 flex items-center justify-center gap-2"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span>{t('preview.viewPdf', '在线预览 PDF')}</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => handleStartDownloadFlow(password)}
                     className="w-full py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-md shadow-blue-200 transition active:scale-98 flex items-center justify-center gap-2"
@@ -561,8 +679,10 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
               <form onSubmit={handleSubmitPassword} className="space-y-4">
                 <div className="space-y-1.5">
                   <label className="block text-xs font-semibold text-slate-700">
-                    {record.type === 'text'
+                    {record.type === 'text' || ((isMarkdownItem(record) || isTextDocItem(record)) && isViewMode)
                       ? t('downloadPage.inputTextLabel', '请输入访问密码以解锁阅读')
+                      : isPdfItem(record) && isViewMode
+                      ? t('downloadPage.inputPdfLabel', '请输入访问密码以预览 PDF')
                       : isImage && isViewMode
                       ? t('downloadPage.inputImageLabel', '请输入访问密码以查看图片')
                       : t('downloadPage.inputLabel', '请输入访问密码以提取文件')}
@@ -615,10 +735,15 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
                       <Loader2 className="w-4 h-4 animate-spin" />
                       <span>{t('passwordModal.verifying', '正在校验密码...')}</span>
                     </>
-                  ) : record.type === 'text' ? (
+                  ) : record.type === 'text' || ((isMarkdownItem(record) || isTextDocItem(record)) && isViewMode) ? (
                     <>
                       <Eye className="w-4 h-4" />
                       <span>{t('downloadPage.submitUnlockText', '验证密码并开始阅读')}</span>
+                    </>
+                  ) : isPdfItem(record) && isViewMode ? (
+                    <>
+                      <Eye className="w-4 h-4" />
+                      <span>{t('downloadPage.submitUnlockPdf', '验证密码并预览 PDF')}</span>
                     </>
                   ) : isImage && isViewMode ? (
                     <>
@@ -669,6 +794,39 @@ export const DownloadPasswordPage: React.FC<DownloadPasswordPageProps> = ({
         onClose={() => setDownloadModalOpen(false)}
         onSuccess={handleDownloadSuccess}
       />
+
+      {/* 图片全屏查看大弹窗 */}
+      {record && isImageItem(record) && (!record.hasPassword || isUnlocked) && (
+        <ImageViewerModal
+          isOpen={showImageViewerModal}
+          onClose={() => setShowImageViewerModal(false)}
+          item={record}
+          allImageItems={[record]}
+          password={password}
+          onDownload={() => triggerFileDownload(password)}
+        />
+      )}
+
+      {/* 文档 / Markdown 渲染弹窗 */}
+      {record && (isMarkdownItem(record) || isTextDocItem(record)) && (!record.hasPassword || isUnlocked) && (
+        <TextMarkdownModal
+          isOpen={showDocModal}
+          onClose={() => setShowDocModal(false)}
+          item={record}
+          password={password}
+        />
+      )}
+
+      {/* PDF 文件在线预览大弹窗 */}
+      {record && isPdfItem(record) && (!record.hasPassword || isUnlocked) && (
+        <PdfViewerModal
+          isOpen={showPdfModal}
+          onClose={() => setShowPdfModal(false)}
+          item={record}
+          password={password}
+          onDownload={() => triggerFileDownload(password)}
+        />
+      )}
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   X,
   Copy,
@@ -10,6 +10,8 @@ import {
   FileDown,
   ArrowUp,
   ArrowLeft,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { marked } from 'marked';
@@ -20,6 +22,7 @@ import { formatDisplayTime } from '../utils/format';
 interface TextReaderViewProps {
   item: ShareItem;
   customContent?: string;
+  password?: string;
   onClose?: () => void;
   isStandalone?: boolean;
 }
@@ -27,6 +30,7 @@ interface TextReaderViewProps {
 export const TextReaderView: React.FC<TextReaderViewProps> = ({
   item,
   customContent,
+  password,
   onClose,
   isStandalone = false,
 }) => {
@@ -34,7 +38,12 @@ export const TextReaderView: React.FC<TextReaderViewProps> = ({
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'preview' | 'raw'>('preview');
 
-  // 下载为 .md 命名确认弹窗
+  // 异步获取的文件内容状态
+  const [fetchedContent, setFetchedContent] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  // 下载为 .md / .txt 命名确认弹窗
   const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [downloadFilename, setDownloadFilename] = useState('');
 
@@ -43,8 +52,52 @@ export const TextReaderView: React.FC<TextReaderViewProps> = ({
   const [scrollProgress, setScrollProgress] = useState(0);
   const [showBackToTop, setShowBackToTop] = useState(false);
 
+  // 加载远端文本内容 (针对上传的 .md/.txt 文件或合辑子文件)
+  const fetchFileContent = useCallback(async () => {
+    const parentId = (item as any).batchParentId;
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const recordId = parentId || item.id;
+    let url = `${origin}/api/records/${recordId}/download?inline=true`;
+    if (parentId) {
+      url += `&file=${encodeURIComponent(item.fileName || item.title)}`;
+    }
+    const pwd = password || item.password;
+    if (pwd) {
+      url += `&password=${encodeURIComponent(pwd)}`;
+    }
+
+    try {
+      setLoading(true);
+      setLoadError(null);
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(t('preview.loadFailed', '获取文档内容失败'));
+      }
+      const text = await res.text();
+      setFetchedContent(text);
+    } catch (err: any) {
+      console.error('Failed to load text content:', err);
+      setLoadError(err.message || t('preview.loadFailed', '获取文档内容失败'));
+    } finally {
+      setLoading(false);
+    }
+  }, [item, password, t]);
+
+  useEffect(() => {
+    if (customContent !== undefined) {
+      setFetchedContent(null);
+      return;
+    }
+    if (item.content && item.content.trim()) {
+      setFetchedContent(null);
+      return;
+    }
+    // 当没有直接传入内容且属于文件记录时，自动拉取流
+    fetchFileContent();
+  }, [item, customContent, fetchFileContent]);
+
   // 原始文本内容
-  const rawContent = customContent || item.content || item.preview || '';
+  const rawContent = customContent ?? fetchedContent ?? item.content ?? item.preview ?? '';
 
   // 监听 ESC 键
   useEffect(() => {
@@ -86,15 +139,20 @@ export const TextReaderView: React.FC<TextReaderViewProps> = ({
     }
   };
 
-  // 点击“下载为 .md”
+  // 点击“下载”
   const handleStartDownload = () => {
-    const sanitizedTitle = (item.title || t('markdownModal.defaultNote', '笔记'))
+    const ext = (item.extension || item.fileName?.split('.').pop() || '').toLowerCase();
+    const isTxt = ['txt', 'log'].includes(ext);
+    const targetExt = isTxt ? `.${ext}` : '.md';
+
+    const baseTitle = item.fileName || item.title || t('markdownModal.defaultNote', '笔记');
+    const sanitizedTitle = baseTitle
       .replace(/[\\/:*?"<>|]/g, '_')
       .replace(/\.+$/, '')
       .trim();
-    const defaultName = sanitizedTitle.toLowerCase().endsWith('.md')
+    const defaultName = sanitizedTitle.toLowerCase().endsWith(targetExt)
       ? sanitizedTitle
-      : `${sanitizedTitle}.md`;
+      : `${sanitizedTitle}${targetExt}`;
     setDownloadFilename(defaultName);
     setShowRenameDialog(true);
   };
@@ -102,15 +160,20 @@ export const TextReaderView: React.FC<TextReaderViewProps> = ({
   // 确认命名并下载
   const handleConfirmDownload = () => {
     let finalName = downloadFilename.trim();
+    const ext = (item.extension || item.fileName?.split('.').pop() || '').toLowerCase();
+    const isTxt = ['txt', 'log'].includes(ext);
+    const targetExt = isTxt ? `.${ext}` : '.md';
+
     if (!finalName) {
-      finalName = t('markdownModal.defaultDoc', '文档.md');
+      finalName = isTxt ? 'document.txt' : t('markdownModal.defaultDoc', '文档.md');
     }
-    if (!finalName.toLowerCase().endsWith('.md')) {
-      finalName += '.md';
+    if (!finalName.toLowerCase().endsWith(targetExt)) {
+      finalName += targetExt;
     }
 
     try {
-      const blob = new Blob([rawContent], { type: 'text/markdown;charset=utf-8' });
+      const mimeType = isTxt ? 'text/plain;charset=utf-8' : 'text/markdown;charset=utf-8';
+      const blob = new Blob([rawContent], { type: mimeType });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -155,6 +218,10 @@ export const TextReaderView: React.FC<TextReaderViewProps> = ({
     }
   };
 
+  const fileExt = (item.extension || item.fileName?.split('.').pop() || '').toLowerCase();
+  const isTxtFile = ['txt', 'log'].includes(fileExt);
+  const displayTitle = item.fileName || item.title || t('markdownModal.defaultNote', '笔记');
+
   return (
     <div className="relative flex flex-col w-full h-full bg-white select-text overflow-hidden">
       {/* 顶部阅读进度条 (长文本滚动时的视觉指示器) */}
@@ -165,23 +232,25 @@ export const TextReaderView: React.FC<TextReaderViewProps> = ({
         />
       </div>
 
-      {/* 顶部标题栏与功能操作按钮组 (与设计图完全一致) */}
+      {/* 顶部标题栏与功能操作按钮组 */}
       <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-slate-100 bg-slate-50/70 shrink-0 z-10">
         <div className="flex items-center gap-2.5 min-w-0 pr-3">
           <div className="w-8 h-8 rounded-xl bg-blue-100/80 text-blue-600 flex items-center justify-center shrink-0 shadow-2xs">
             <FileText className="w-4 h-4" />
           </div>
           <div className="min-w-0">
-            <h3 className="text-sm font-bold text-slate-800 truncate" title={item.title}>
-              {item.title}
+            <h3 className="text-sm font-bold text-slate-800 truncate" title={displayTitle}>
+              {displayTitle}
             </h3>
             <p className="text-[11px] text-slate-400 mt-0.5 font-mono">
-              {formatDisplayTime(item.createdAt)} · {t('markdownModal.chars', { count: rawContent.length })}
+              {loading
+                ? t('records.loading', '正在加载文档内容...')
+                : `${formatDisplayTime(item.createdAt)} · ${t('markdownModal.chars', { count: rawContent.length })}`}
             </p>
           </div>
         </div>
 
-        {/* 右上角操作区：Markdown/原始切换、复制、下载为.md、关闭 */}
+        {/* 右上角操作区：Markdown/原始切换、复制、下载、关闭 */}
         <div className="flex items-center gap-2 shrink-0">
           {/* 渲染视图切换 */}
           <div className="hidden sm:flex items-center bg-slate-200/60 p-0.5 rounded-lg border border-slate-200 text-xs">
@@ -215,7 +284,8 @@ export const TextReaderView: React.FC<TextReaderViewProps> = ({
           <button
             type="button"
             onClick={handleCopy}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 hover:text-blue-600 text-xs font-medium transition active:scale-95 shadow-2xs"
+            disabled={loading || Boolean(loadError)}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 hover:text-blue-600 text-xs font-medium transition active:scale-95 shadow-2xs disabled:opacity-50"
             title="复制全部内容"
           >
             {copied ? (
@@ -231,15 +301,16 @@ export const TextReaderView: React.FC<TextReaderViewProps> = ({
             )}
           </button>
 
-          {/* 下载为 .md 文件 */}
+          {/* 下载为文件 */}
           <button
             type="button"
             onClick={handleStartDownload}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-semibold transition active:scale-95 shadow-2xs"
-            title={t('markdownModal.downloadMd', '下载为 .md')}
+            disabled={loading || Boolean(loadError)}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-semibold transition active:scale-95 shadow-2xs disabled:opacity-50"
+            title={isTxtFile ? t('preview.downloadTxt', '下载文件') : t('markdownModal.downloadMd', '下载为 .md')}
           >
             <Download className="w-3.5 h-3.5 text-blue-600" />
-            <span>{t('markdownModal.downloadMd', '下载为 .md')}</span>
+            <span>{isTxtFile ? t('preview.downloadTxt', '下载文件') : t('markdownModal.downloadMd', '下载为 .md')}</span>
           </button>
 
           {/* 关闭 / 返回首页按钮 */}
@@ -260,18 +331,41 @@ export const TextReaderView: React.FC<TextReaderViewProps> = ({
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto bg-white selection:bg-blue-100 selection:text-blue-900 custom-scrollbar overscroll-contain relative scroll-smooth"
       >
-        <div className="max-w-4xl mx-auto w-full p-5 sm:p-8 sm:px-12">
-          {activeTab === 'preview' ? (
-            <div
-              className="markdown-content max-w-none text-slate-800 leading-relaxed text-sm selection:bg-blue-100"
-              dangerouslySetInnerHTML={{ __html: markdownHtml }}
-            />
-          ) : (
-            <pre className="font-mono text-xs sm:text-sm text-slate-800 bg-slate-50/80 p-5 rounded-2xl border border-slate-200 whitespace-pre-wrap break-words leading-relaxed select-text shadow-inner">
-              {rawContent}
-            </pre>
-          )}
-        </div>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-24 text-slate-400 gap-3">
+            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+            <span className="text-xs font-medium text-slate-500">
+              {t('records.loading', '正在加载文档内容...')}
+            </span>
+          </div>
+        ) : loadError ? (
+          <div className="flex flex-col items-center justify-center py-24 text-center p-6 gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center border border-rose-100">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <p className="text-sm font-semibold text-slate-800">{loadError}</p>
+            <button
+              type="button"
+              onClick={fetchFileContent}
+              className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition"
+            >
+              {t('preview.retry', '重新加载')}
+            </button>
+          </div>
+        ) : (
+          <div className="max-w-4xl mx-auto w-full p-5 sm:p-8 sm:px-12">
+            {activeTab === 'preview' ? (
+              <div
+                className="markdown-content max-w-none text-slate-800 leading-relaxed text-sm selection:bg-blue-100"
+                dangerouslySetInnerHTML={{ __html: markdownHtml }}
+              />
+            ) : (
+              <pre className="font-mono text-xs sm:text-sm text-slate-800 bg-slate-50/80 p-5 rounded-2xl border border-slate-200 whitespace-pre-wrap break-words leading-relaxed select-text shadow-inner">
+                {rawContent}
+              </pre>
+            )}
+          </div>
+        )}
 
         {/* 浮动“回到顶部”按钮 (长文本滚动超过一定距离时自动显示) */}
         {showBackToTop && (
@@ -304,32 +398,40 @@ export const TextReaderView: React.FC<TextReaderViewProps> = ({
               <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
                 <FileDown className="w-5 h-5" />
               </div>
-              <div>
-                <h4 className="text-sm font-bold text-slate-800">{t('markdownModal.dialogTitle', '导出 Markdown 文件')}</h4>
-                <p className="text-[11px] text-slate-400">{t('markdownModal.dialogSubtitle', '请为下载的 .md 文件命名')}</p>
-              </div>
+            <div>
+              <h4 className="text-sm font-bold text-slate-800">
+                {isTxtFile ? t('preview.dialogTitleTxt', '导出文本文件') : t('markdownModal.dialogTitle', '导出 Markdown 文件')}
+              </h4>
+              <p className="text-[11px] text-slate-400">
+                {isTxtFile ? t('preview.dialogSubtitleTxt', '请为下载的文本文件命名') : t('markdownModal.dialogSubtitle', '请为下载的 .md 文件命名')}
+              </p>
             </div>
+          </div>
 
-            <div className="mb-4">
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                {t('markdownModal.fileNameLabel', '文件名称')}
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  autoFocus
-                  value={downloadFilename}
-                  onChange={(e) => setDownloadFilename(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleConfirmDownload();
-                    if (e.key === 'Escape') setShowRenameDialog(false);
-                  }}
-                  placeholder="e.g. Note.md"
-                  className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono text-slate-800"
-                />
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1">{t('markdownModal.autoExtTip', '若未输入后缀，系统将自动补全为 .md')}</p>
+          <div className="mb-4">
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              {t('markdownModal.fileNameLabel', '文件名称')}
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                autoFocus
+                value={downloadFilename}
+                onChange={(e) => setDownloadFilename(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleConfirmDownload();
+                  if (e.key === 'Escape') setShowRenameDialog(false);
+                }}
+                placeholder={isTxtFile ? 'e.g. note.txt' : 'e.g. Note.md'}
+                className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono text-slate-800"
+              />
             </div>
+            <p className="text-[11px] text-slate-400 mt-1">
+              {isTxtFile
+                ? t('preview.autoExtTipTxt', '若未输入后缀，系统将自动补全为 .txt')
+                : t('markdownModal.autoExtTip', '若未输入后缀，系统将自动补全为 .md')}
+            </p>
+          </div>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button

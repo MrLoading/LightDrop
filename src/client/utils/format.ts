@@ -129,6 +129,70 @@ export function isImageItem(
 }
 
 /**
+ * 判断是否为 Markdown 文档项目
+ */
+export function isMarkdownItem(
+  item?: { fileName?: string; title?: string; extension?: string; mimeType?: string } | null
+): boolean {
+  if (!item) return false;
+  const name = item.fileName || item.title || '';
+  const ext = (item.extension || (name.includes('.') ? name.split('.').pop() : '') || '').toLowerCase();
+  if (['md', 'markdown', 'mdown', 'mkd'].includes(ext)) {
+    return true;
+  }
+  if (item.mimeType && (item.mimeType.includes('markdown') || item.mimeType === 'text/x-markdown')) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * 判断是否为文本/代码文档项目 (txt, log, json, yaml, 等)
+ */
+export function isTextDocItem(
+  item?: { fileName?: string; title?: string; extension?: string; mimeType?: string } | null
+): boolean {
+  if (!item) return false;
+  const name = item.fileName || item.title || '';
+  const ext = (item.extension || (name.includes('.') ? name.split('.').pop() : '') || '').toLowerCase();
+  const textExts = ['txt', 'text', 'log', 'json', 'yaml', 'yml', 'xml', 'csv', 'sql', 'sh', 'bash', 'py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css'];
+  if (textExts.includes(ext)) {
+    return true;
+  }
+  if (item.mimeType && (item.mimeType.startsWith('text/') || item.mimeType === 'application/json')) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * 判断是否为 PDF 文档项目
+ */
+export function isPdfItem(
+  item?: { fileName?: string; title?: string; extension?: string; mimeType?: string } | null
+): boolean {
+  if (!item) return false;
+  const name = item.fileName || item.title || '';
+  const ext = (item.extension || (name.includes('.') ? name.split('.').pop() : '') || '').toLowerCase();
+  if (ext === 'pdf') {
+    return true;
+  }
+  if (item.mimeType && item.mimeType.toLowerCase() === 'application/pdf') {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * 判断文件是否为可直接预览的文档 (md, txt, pdf)
+ */
+export function isDocPreviewable(
+  item?: { fileName?: string; title?: string; extension?: string; mimeType?: string } | null
+): boolean {
+  return isMarkdownItem(item) || isTextDocItem(item) || isPdfItem(item);
+}
+
+/**
  * 清除标题中附加的 (含x个附件) / (附件xxx) / （含x个附件） 等后缀
  */
 export function stripAttachmentSuffix(text: string): string {

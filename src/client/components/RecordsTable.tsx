@@ -36,7 +36,18 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ShareItem, ShareItemType, SystemStats } from '@shared/types';
-import { formatBytes, formatDisplayTime, getFileTypeLabel, isImageItem, getItemDisplayTitle, stripAttachmentSuffix } from '../utils/format';
+import {
+  formatBytes,
+  formatDisplayTime,
+  getFileTypeLabel,
+  isImageItem,
+  isMarkdownItem,
+  isTextDocItem,
+  isPdfItem,
+  isDocPreviewable,
+  getItemDisplayTitle,
+  stripAttachmentSuffix,
+} from '../utils/format';
 import { copyToClipboard } from '../utils/clipboard';
 import { PasswordModal } from './PasswordModal';
 import { AuditLogModal } from './AuditLogModal';
@@ -47,6 +58,7 @@ import { ShareInfoModal } from './ShareInfoModal';
 import { ClearRecordsModal, ClearRecordsOptions } from './ClearRecordsModal';
 import { ImageViewerModal } from './ImageViewerModal';
 import { BatchViewerModal } from './BatchViewerModal';
+import { PdfViewerModal } from './PdfViewerModal';
 import { getCharacterInfo, getDisplayNickname } from '../utils/nickname';
 
 export type SortField = 'time' | 'name' | 'size';
@@ -380,7 +392,7 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
   const [pwdModalState, setPwdModalState] = useState<{
     isOpen: boolean;
     item: ShareItem | null;
-    actionType: 'copy' | 'download' | 'preview' | 'view_markdown' | 'view_image' | 'view_batch';
+    actionType: 'copy' | 'download' | 'preview' | 'view_markdown' | 'view_image' | 'view_batch' | 'view_pdf';
   }>({
     isOpen: false,
     item: null,
@@ -389,6 +401,9 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
 
   // 全屏查看图片状态
   const [imageViewerItem, setImageViewerItem] = useState<{ item: ShareItem; password?: string } | null>(null);
+
+  // 在线预览 PDF 状态
+  const [pdfViewerItem, setPdfViewerItem] = useState<{ item: ShareItem; password?: string } | null>(null);
 
   // 获取当前所有图片记录，供全屏查看时快速上/下一张切换
   const allImageItems = useMemo(() => {
@@ -469,9 +484,9 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
     setImageViewerItem({ item, password: item.password });
   };
 
-  // 触发查看 Markdown 大弹窗
+  // 触发查看 Markdown / 纯文本大弹窗
   const handleViewMarkdownClick = async (item: ShareItem) => {
-    if (item.hasPassword && !item.content) {
+    if (item.hasPassword && !item.password && !item.content) {
       setPwdModalState({
         isOpen: true,
         item,
@@ -480,6 +495,19 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
       return;
     }
     setMarkdownModalItem(item);
+  };
+
+  // 触发查看 PDF 大弹窗
+  const handleViewPdfClick = async (item: ShareItem) => {
+    if (item.hasPassword && !item.password) {
+      setPwdModalState({
+        isOpen: true,
+        item,
+        actionType: 'view_pdf',
+      });
+      return;
+    }
+    setPdfViewerItem({ item, password: item.password });
   };
 
   // 点击条目进入详情界面
@@ -491,6 +519,10 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
       handleViewBatchClick(item);
     } else if (isImageItem(item)) {
       handleViewImageClick(item);
+    } else if (isMarkdownItem(item) || isTextDocItem(item)) {
+      handleViewMarkdownClick(item);
+    } else if (isPdfItem(item)) {
+      handleViewPdfClick(item);
     } else {
       handlePreviewClick(item);
     }
@@ -564,10 +596,17 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
       setMarkdownModalItem({
         ...item,
         content: decryptedContent,
+        password,
       });
     } else if (pwdModalState.actionType === 'view_image') {
       await verifyPassword(item.id, password);
       setImageViewerItem({
+        item: { ...item, password },
+        password,
+      });
+    } else if (pwdModalState.actionType === 'view_pdf') {
+      await verifyPassword(item.id, password);
+      setPdfViewerItem({
         item: { ...item, password },
         password,
       });
@@ -1257,13 +1296,17 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                     <td className="py-3 px-3 whitespace-nowrap shrink-0">
                       <div
                         className={`flex items-center gap-1.5 whitespace-nowrap ${
-                          isImageItem(item) || item.type === 'batch' ? 'cursor-pointer group/type' : ''
+                          isImageItem(item) || item.type === 'batch' || isDocPreviewable(item) ? 'cursor-pointer group/type' : ''
                         }`}
                         onClick={() => {
                           if (item.type === 'batch') {
                             handleViewBatchClick(item);
                           } else if (isImageItem(item)) {
                             handleViewImageClick(item);
+                          } else if (isMarkdownItem(item) || isTextDocItem(item)) {
+                            handleViewMarkdownClick(item);
+                          } else if (isPdfItem(item)) {
+                            handleViewPdfClick(item);
                           }
                         }}
                         title={
@@ -1273,13 +1316,15 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                               : t('records.clickToViewBatchFiles', '点击浏览文件合辑')
                             : isImageItem(item)
                             ? t('records.clickToViewImage', '点击全屏查看图片')
+                            : isDocPreviewable(item)
+                            ? t('preview.clickToViewDoc', '点击预览文档')
                             : undefined
                         }
                       >
                         {getRecordIcon(item)}
                         <span
                           className={`font-medium whitespace-nowrap transition ${
-                            isImageItem(item) || item.type === 'batch'
+                            isImageItem(item) || item.type === 'batch' || isDocPreviewable(item)
                               ? 'text-slate-600 group-hover/type:text-blue-600 group-hover/type:underline underline-offset-2'
                               : 'text-slate-600'
                           }`}
@@ -1296,6 +1341,12 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                               : item.isImageBatch
                               ? t('records.typeImageBatch', '图片合辑')
                               : t('records.typeBatch', '文件合辑')
+                            : isPdfItem(item)
+                            ? t('preview.typePdf', 'PDF文档')
+                            : isMarkdownItem(item)
+                            ? t('preview.typeMarkdown', 'Markdown')
+                            : isTextDocItem(item)
+                            ? t('preview.typeTxt', '文本文件')
                             : t('records.typeFile')}
                         </span>
                       </div>
@@ -1694,6 +1745,32 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                   <span>{t('preview.viewFullscreen', '全屏查看')}</span>
                 </button>
               )}
+              {(isMarkdownItem(previewItem) || isTextDocItem(previewItem)) && (
+                <button
+                  onClick={() => {
+                    handleViewMarkdownClick(previewItem);
+                    setPreviewItem(null);
+                  }}
+                  className="px-3.5 py-2 bg-blue-600 text-white rounded-xl text-xs font-medium hover:bg-blue-700 transition flex items-center gap-1.5 shadow-sm active:scale-95"
+                  title={t('preview.viewContent', '预览内容')}
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>{t('preview.viewContent', '预览内容')}</span>
+                </button>
+              )}
+              {isPdfItem(previewItem) && (
+                <button
+                  onClick={() => {
+                    handleViewPdfClick(previewItem);
+                    setPreviewItem(null);
+                  }}
+                  className="px-3.5 py-2 bg-rose-600 text-white rounded-xl text-xs font-medium hover:bg-rose-700 transition flex items-center gap-1.5 shadow-sm active:scale-95"
+                  title={t('preview.viewPdf', '在线预览 PDF')}
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>{t('preview.viewPdf', '在线预览 PDF')}</span>
+                </button>
+              )}
               {previewItem.type === 'text' ? (
                 <button
                   onClick={() => {
@@ -1785,6 +1862,7 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
       {markdownModalItem && (
         <TextMarkdownModal
           item={markdownModalItem}
+          password={markdownModalItem.password}
           isOpen={Boolean(markdownModalItem)}
           onClose={() => setMarkdownModalItem(null)}
         />
@@ -1840,6 +1918,18 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
           onDownloadBatch={onDownload}
           currentAccessUrl={currentAccessUrl}
           verifyPassword={verifyPassword}
+        />
+      )}
+
+      {/* PDF 文件在线预览大弹窗 */}
+      {pdfViewerItem && (
+        <PdfViewerModal
+          isOpen={Boolean(pdfViewerItem)}
+          onClose={() => setPdfViewerItem(null)}
+          item={pdfViewerItem.item}
+          password={pdfViewerItem.password}
+          onDownload={onDownload}
+          currentAccessUrl={currentAccessUrl}
         />
       )}
 
@@ -1904,6 +1994,12 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                           : t('records.typeBatch', '文件合辑')
                         : item.type === 'image'
                         ? t('records.typeImage', '图片')
+                        : isPdfItem(item)
+                        ? t('preview.typePdf', 'PDF文档')
+                        : isMarkdownItem(item)
+                        ? t('preview.typeMarkdown', 'Markdown')
+                        : isTextDocItem(item)
+                        ? t('preview.typeTxt', '文本文件')
                         : t('records.typeFile', '文件')}
                     </span>
                     <span className="text-xs font-bold text-slate-800 truncate">
@@ -2040,7 +2136,13 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                 <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
                   <span className="flex items-center gap-1 text-blue-600 font-semibold group-hover/popover:text-blue-700">
                     <ExternalLink className="w-3 h-3 shrink-0" />
-                    <span>{t('records.hoverPreviewClickHint', '点击进入详情界面')}</span>
+                    <span>
+                      {isDocPreviewable(item)
+                        ? t('preview.hoverPreviewDocHint', '点击在线阅读与预览')
+                        : isImageItem(item)
+                        ? t('preview.hoverPreviewImgHint', '点击全屏查看图片')
+                        : t('records.hoverPreviewClickHint', '点击进入详情界面')}
+                    </span>
                   </span>
                   {item.senderName && (
                     <span className="text-slate-400 text-[10px]">

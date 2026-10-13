@@ -6,9 +6,10 @@ interface TextMarkdownModalProps {
   item: ShareItem;
   isOpen: boolean;
   onClose: () => void;
+  password?: string;
 }
 
-export const TextMarkdownModal: React.FC<TextMarkdownModalProps> = ({ item, isOpen, onClose }) => {
+export const TextMarkdownModal: React.FC<TextMarkdownModalProps> = ({ item, isOpen, onClose, password }) => {
   if (!isOpen) return null;
 
   return (
@@ -19,7 +20,7 @@ export const TextMarkdownModal: React.FC<TextMarkdownModalProps> = ({ item, isOp
       }}
     >
       <div className="bg-white rounded-2xl w-full max-w-4xl lg:max-w-5xl shadow-2xl border border-slate-200/90 flex flex-col h-[85vh] overflow-hidden animate-scale-in">
-        <TextReaderView item={item} onClose={onClose} />
+        <TextReaderView item={item} password={password} onClose={onClose} />
       </div>
     </div>
   );
