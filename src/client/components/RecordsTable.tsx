@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   FileText,
   File,
@@ -30,10 +31,12 @@ import {
   ArrowDownAZ,
   ArrowUpZA,
   BarChart3,
+  Tag,
+  Paperclip,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ShareItem, ShareItemType, SystemStats } from '@shared/types';
-import { formatBytes, formatDisplayTime, getFileTypeLabel, isImageItem } from '../utils/format';
+import { formatBytes, formatDisplayTime, getFileTypeLabel, isImageItem, getItemDisplayTitle, stripAttachmentSuffix } from '../utils/format';
 import { copyToClipboard } from '../utils/clipboard';
 import { PasswordModal } from './PasswordModal';
 import { AuditLogModal } from './AuditLogModal';
@@ -102,6 +105,46 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
   const [clearRecordsModalOpen, setClearRecordsModalOpen] = useState(false);
   const [batchViewerItem, setBatchViewerItem] = useState<{ item: ShareItem; password?: string } | null>(null);
   const [batchDownloading, setBatchDownloading] = useState(false);
+
+  // 鼠标悬停在 内容/文件名 时的浮动预览状态
+  const [hoverPreview, setHoverPreview] = useState<{
+    item: ShareItem;
+    rect: DOMRect;
+  } | null>(null);
+  const hoverTimerRef = useRef<any>(null);
+  const closeTimerRef = useRef<any>(null);
+
+  const handleCellMouseEnter = (item: ShareItem, e: React.MouseEvent<HTMLElement>) => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    hoverTimerRef.current = setTimeout(() => {
+      setHoverPreview({ item, rect });
+    }, 120);
+  };
+
+  const handleCellMouseLeave = () => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    closeTimerRef.current = setTimeout(() => {
+      setHoverPreview(null);
+    }, 160);
+  };
+
+  const handlePopoverMouseEnter = () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  };
+
+  const handlePopoverMouseLeave = () => {
+    setHoverPreview(null);
+  };
 
   // 排序维度：按时间、按名称、按大小
   const [sortBy, setSortBy] = useState<SortField>(() => {
@@ -268,12 +311,9 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
     }
   };
 
-  // 发送文字内容，摘录前15个字符作为内容/文件名
+  // 获取条目在列表中的展示标题（优先用户填写的标题/描述，其次文本内容前x字符，最后文件名等，不含附件后缀）
   const getTextDisplayTitle = (item: ShareItem): string => {
-    if (item.type !== 'text') return item.title || item.fileName || 'Item';
-    const raw = item.title || item.content || 'Text';
-    const oneLine = raw.replace(/\s+/g, ' ').trim();
-    return oneLine.length > 15 ? `${oneLine.substring(0, 15)}...` : oneLine;
+    return getItemDisplayTitle(item, 20);
   };
 
   // 打开二维码弹窗 (支持下载模式与查看模式)
@@ -440,6 +480,20 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
       return;
     }
     setMarkdownModalItem(item);
+  };
+
+  // 点击条目进入详情界面
+  const handleRowItemClick = (item: ShareItem) => {
+    setHoverPreview(null);
+    if (item.type === 'text') {
+      handleViewMarkdownClick(item);
+    } else if (item.type === 'batch') {
+      handleViewBatchClick(item);
+    } else if (isImageItem(item)) {
+      handleViewImageClick(item);
+    } else {
+      handlePreviewClick(item);
+    }
   };
 
   // 批量勾选打包下载 ZIP
@@ -1248,7 +1302,11 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                     </td>
 
                     {/* 内容 / 文件名 */}
-                    <td className="py-3 px-4 min-w-[200px] max-w-[420px]">
+                    <td
+                      className="py-3 px-4 min-w-[200px] max-w-[420px]"
+                      onMouseEnter={(e) => handleCellMouseEnter(item, e)}
+                      onMouseLeave={handleCellMouseLeave}
+                    >
                       <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-1.5 min-w-0">
                           {item.isUrl ? (
@@ -1257,26 +1315,14 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                               target="_blank"
                               rel="noreferrer"
                               className="font-medium text-blue-600 hover:underline flex items-center gap-1 truncate max-w-full"
-                              title={item.content || item.title}
                             >
                               <span className="truncate">{getTextDisplayTitle(item)}</span>
                               <ExternalLink className="w-3 h-3 shrink-0" />
                             </a>
                           ) : (
                             <span
-                              onClick={() => {
-                                if (item.type === 'text') {
-                                  handleViewMarkdownClick(item);
-                                } else if (item.type === 'batch') {
-                                  handleViewBatchClick(item);
-                                } else if (isImageItem(item)) {
-                                  handleViewImageClick(item);
-                                } else {
-                                  handlePreviewClick(item);
-                                }
-                              }}
+                              onClick={() => handleRowItemClick(item)}
                               className="font-medium text-slate-800 hover:text-blue-600 cursor-pointer truncate max-w-full"
-                              title={item.type === 'text' ? item.content || item.title : item.fileName || item.title}
                             >
                               {getTextDisplayTitle(item)}
                             </span>
@@ -1796,6 +1842,217 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
           verifyPassword={verifyPassword}
         />
       )}
+
+      {/* 鼠标悬停在 内容/文件名 时的信息预览浮层 (基本信息预览：发送标题/描述、文本、附件列表条目名称) */}
+      {hoverPreview &&
+        createPortal(
+          (() => {
+            const { item, rect } = hoverPreview;
+            const popoverWidth = 360;
+            let left = rect.left;
+            if (left + popoverWidth > window.innerWidth - 16) {
+              left = window.innerWidth - popoverWidth - 16;
+            }
+            if (left < 16) left = 16;
+
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const showBelow = spaceBelow > 240;
+            const top = showBelow ? rect.bottom + 6 : Math.max(16, rect.top - 6);
+            const transform = showBelow ? 'none' : 'translateY(-100%)';
+
+            const hasCustomTitle = Boolean(item.customTitle && item.customTitle.trim());
+            const hasTextContent =
+              Boolean(item.content && item.content.trim()) ||
+              Boolean(item.hasPassword && !item.content && item.type === 'text');
+
+            // 检查是否有附件
+            const hasBatchFiles =
+              item.type === 'batch' && Boolean(item.files && item.files.length > 0);
+            const isSingleAttachment =
+              (item.type === 'file' || item.type === 'image') && Boolean(item.fileName || item.title);
+            const isFolderAttachment = item.type === 'folder' && Boolean(item.fileName || item.title);
+            const hasAttachments = hasBatchFiles || isSingleAttachment || isFolderAttachment;
+
+            return (
+              <div
+                onMouseEnter={handlePopoverMouseEnter}
+                onMouseLeave={handlePopoverMouseLeave}
+                onClick={() => handleRowItemClick(item)}
+                style={{
+                  position: 'fixed',
+                  top: `${top}px`,
+                  left: `${left}px`,
+                  transform,
+                  zIndex: 9999,
+                  width: `${popoverWidth}px`,
+                }}
+                className="bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl shadow-xl p-4 text-left cursor-pointer transition-all animate-fade-in group/popover hover:border-blue-300"
+              >
+                {/* 卡片头部：类型与标识 */}
+                <div className="flex items-center justify-between gap-2 mb-3 pb-2.5 border-b border-slate-100">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/60 shrink-0">
+                      {item.type === 'text'
+                        ? item.isUrl
+                          ? t('records.webUrl', '网页直链')
+                          : t('records.typeText', '文本')
+                        : item.type === 'folder'
+                        ? t('records.typeFolder', '文件夹')
+                        : item.type === 'batch'
+                        ? item.content
+                          ? t('records.typeWithAttachments', '图文附件')
+                          : t('records.typeBatch', '文件合辑')
+                        : item.type === 'image'
+                        ? t('records.typeImage', '图片')
+                        : t('records.typeFile', '文件')}
+                    </span>
+                    <span className="text-xs font-bold text-slate-800 truncate">
+                      {t('records.hoverPreviewTitle', '基本信息预览')}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 shrink-0 font-mono">
+                    {formatDisplayTime(item.createdAt)}
+                  </span>
+                </div>
+
+                {/* 1. 发送标题 / 描述（如有） */}
+                {hasCustomTitle && (
+                  <div className="mb-2.5">
+                    <div className="text-[11px] font-semibold text-slate-400 flex items-center gap-1 mb-1">
+                      <Tag className="w-3 h-3 text-blue-500 shrink-0" />
+                      <span>{t('records.hoverPreviewDesc', '发送标题 / 描述')}</span>
+                    </div>
+                    <div className="text-xs font-semibold text-slate-800 bg-blue-50/50 border border-blue-100/80 rounded-lg px-2.5 py-1.5 break-words">
+                      {item.customTitle}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. 文本内容（如有） */}
+                {hasTextContent && (
+                  <div className="mb-2.5">
+                    <div className="text-[11px] font-semibold text-slate-400 flex items-center gap-1 mb-1">
+                      <FileText className="w-3 h-3 text-slate-500 shrink-0" />
+                      <span>{t('records.hoverPreviewText', '正文文本')}</span>
+                    </div>
+                    {item.hasPassword && !item.content ? (
+                      <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200/60 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
+                        <Lock className="w-3 h-3 shrink-0 text-amber-600" />
+                        <span>
+                          {t('records.hoverPreviewEncrypted', '内容受密码保护，点击验证后查看')}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-slate-700 bg-slate-50 border border-slate-200/60 rounded-lg px-2.5 py-1.5 max-h-28 overflow-y-auto whitespace-pre-wrap break-words font-sans leading-relaxed">
+                        {item.content}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 3. 附件列表条目名称（如有） */}
+                {hasAttachments && (
+                  <div className="mb-2.5">
+                    {hasBatchFiles && (
+                      <>
+                        <div className="text-[11px] font-semibold text-slate-400 flex items-center gap-1 mb-1">
+                          <Paperclip className="w-3 h-3 text-slate-500 shrink-0" />
+                          <span>
+                            {t('records.hoverPreviewAttachments', {
+                              count: item.files!.length,
+                              defaultValue: `附件列表 (${item.files!.length} 个)`,
+                            })}
+                          </span>
+                        </div>
+                        <div className="space-y-1 max-h-32 overflow-y-auto pr-0.5">
+                          {item.files!.map((file, idx) => (
+                            <div
+                              key={file.id || idx}
+                              className="flex items-center justify-between text-xs bg-slate-50 border border-slate-200/50 rounded-md px-2 py-1 gap-2"
+                            >
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                {file.isImage ? (
+                                  <ImageIcon className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                                ) : (
+                                  <File className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                                )}
+                                <span className="truncate text-slate-700 font-medium">
+                                  {file.name}
+                                </span>
+                              </div>
+                              <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                                {formatBytes(file.size)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {isSingleAttachment && (
+                      <>
+                        <div className="text-[11px] font-semibold text-slate-400 flex items-center gap-1 mb-1">
+                          <Paperclip className="w-3 h-3 text-slate-500 shrink-0" />
+                          <span>{t('records.hoverPreviewSingleAttachment', '附件')}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs bg-slate-50 border border-slate-200/50 rounded-md px-2 py-1 gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {item.type === 'image' ? (
+                              <ImageIcon className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                            ) : (
+                              <File className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                            )}
+                            <span className="truncate text-slate-700 font-medium">
+                              {item.fileName || item.title}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                            {formatBytes(item.fileSize)}
+                          </span>
+                        </div>
+                      </>
+                    )}
+
+                    {isFolderAttachment && (
+                      <>
+                        <div className="text-[11px] font-semibold text-slate-400 flex items-center gap-1 mb-1">
+                          <Folder className="w-3 h-3 text-amber-500 shrink-0" />
+                          <span>{t('records.hoverPreviewFolderAttachment', '文件夹附件')}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs bg-slate-50 border border-slate-200/50 rounded-md px-2 py-1 gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <Folder className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                            <span className="truncate text-slate-700 font-medium">
+                              {item.fileName || item.title}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                            {item.fileCount ? `${item.fileCount} 个文件 · ` : ''}
+                            {formatBytes(item.fileSize)}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* 底部点击操作提示 */}
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                  <span className="flex items-center gap-1 text-blue-600 font-semibold group-hover/popover:text-blue-700">
+                    <ExternalLink className="w-3 h-3 shrink-0" />
+                    <span>{t('records.hoverPreviewClickHint', '点击进入详情界面')}</span>
+                  </span>
+                  {item.senderName && (
+                    <span className="text-slate-400 text-[10px]">
+                      {getDisplayNickname(item.senderName || item.nickname, i18n.language)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })(),
+          document.body
+        )}
     </div>
   );
 };

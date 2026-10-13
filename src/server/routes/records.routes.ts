@@ -88,6 +88,7 @@ recordsRouter.get('/', (req: Request, res: Response) => {
     items = items.filter(
       (item) =>
         item.title.toLowerCase().includes(q) ||
+        (item.customTitle && item.customTitle.toLowerCase().includes(q)) ||
         (item.content && item.content.toLowerCase().includes(q)) ||
         (item.fileName && item.fileName.toLowerCase().includes(q)) ||
         (item.senderName && item.senderName.toLowerCase().includes(q)) ||
@@ -180,10 +181,14 @@ recordsRouter.post('/text', (req: Request, res: Response) => {
   const trimmed = content.trim();
   const isUrl = /^(https?:\/\/|www\.)[^\s/$.?#].[^\s]*$/i.test(trimmed);
 
-  let title = customTitle?.trim();
+  const cleanCustomTitle = customTitle && typeof customTitle === 'string' && customTitle.trim()
+    ? fixFileName(customTitle).trim()
+    : undefined;
+
+  let title = cleanCustomTitle;
   if (!title) {
     const oneLine = trimmed.replace(/\s+/g, ' ');
-    title = oneLine.length > 15 ? `${oneLine.substring(0, 15)}...` : oneLine;
+    title = oneLine.length > 20 ? `${oneLine.substring(0, 20)}...` : oneLine;
   }
 
   const preview = trimmed.length > 120 ? `${trimmed.substring(0, 120)}...` : trimmed;
@@ -197,6 +202,7 @@ recordsRouter.post('/text', (req: Request, res: Response) => {
     id: nanoid(10),
     type: 'text',
     title,
+    customTitle: cleanCustomTitle,
     content: trimmed,
     preview,
     isUrl,
@@ -293,7 +299,7 @@ recordsRouter.post(
         const firstLine = contentStr.split('\n')[0].replace(/^[#\s*-_>]+/, '').trim();
         const summary = firstLine.length > 25 ? `${firstLine.substring(0, 25)}...` : firstLine;
         defaultTitle = summary
-          ? `${summary} (含${subFiles.length}个附件)`
+          ? summary
           : allImages
           ? `${subFiles[0].name} 等 ${subFiles.length} 张图片`
           : `${subFiles[0].name} 等 ${subFiles.length} 个文件`;
@@ -313,6 +319,7 @@ recordsRouter.post(
         id,
         type: 'batch',
         title,
+        customTitle: customTitle || undefined,
         content: contentStr || undefined,
         preview: contentStr ? (contentStr.length > 120 ? `${contentStr.substring(0, 120)}...` : contentStr) : undefined,
         fileName: title,
@@ -369,10 +376,13 @@ recordsRouter.post(
 
     const now = new Date().toISOString();
     const isImg = isImageFile(originalName, mimeType.toString());
+    const customTitle = req.body.title ? fixFileName(req.body.title).trim() : '';
+    const title = customTitle || originalName;
     const newItem: ShareItem = {
       id,
       type: isImg ? 'image' : 'file',
-      title: originalName,
+      title,
+      customTitle: customTitle || undefined,
       fileName: originalName,
       mimeType: mimeType.toString(),
       extension: ext,
@@ -461,11 +471,14 @@ recordsRouter.post(
       } catch (_) {}
     }
 
+    const customTitle = req.body.title ? fixFileName(req.body.title).trim() : '';
+    const title = customTitle || folderName;
     const now = new Date().toISOString();
     const newItem: ShareItem = {
       id,
       type: 'folder',
-      title: folderName,
+      title,
+      customTitle: customTitle || undefined,
       content: contentStr || undefined,
       preview: contentStr ? (contentStr.length > 120 ? `${contentStr.substring(0, 120)}...` : contentStr) : undefined,
       fileName: folderName,
