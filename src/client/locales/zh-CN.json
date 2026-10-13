@@ -433,6 +433,7 @@
     "copyLink": "复制",
     "copied": "已复制",
     "done": "完成并关闭",
+    "close": "关闭",
     "discoveryGuideTitle": "💡 电脑 Wi-Fi 切换后，手机如何快速感知？",
     "guideTip1Title": "方案 1：使用稳定域名 (.local)",
     "guideTip1Desc": "手机使用本页面推荐的 .local 稳定域名。Mac 无论切换哪个 Wi-Fi，.local 域名均自动解析到新 IP，手机直接访问永久有效。",

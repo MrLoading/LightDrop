@@ -433,6 +433,7 @@
     "copyLink": "Copy",
     "copied": "Copied",
     "done": "Done & Close",
+    "close": "Close",
     "discoveryGuideTitle": "💡 How does mobile track service when host Wi-Fi switches?",
     "guideTip1Title": "Method 1: Use Stable Local Domain (.local)",
     "guideTip1Desc": "Scan using the recommended .local domain. No matter which Wi-Fi your Mac switches to, .local automatically resolves to the new IP.",
