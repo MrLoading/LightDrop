@@ -111,9 +111,9 @@ export class NetworkWatcherService extends EventEmitter {
         // 2. 触发自定义事件
         this.emit('networkChanged', payload);
 
-        // 3. 若处于 macOS 且允许系统通知，发送原生系统横幅通知
-        if (settings.enableMacNotification !== false && process.platform === 'darwin') {
-          this.sendMacNotification(
+        // 3. 发送宿主机原生系统横幅通知 (跨平台支持 macOS / Windows / Linux)
+        if (settings.enableMacNotification !== false) {
+          this.sendDesktopNotification(
             'LightDrop · 网络与 IP 已切换',
             `新地址: ${newUrl}\n稳定域名: ${bonjourUrl}`
           );
@@ -141,20 +141,50 @@ export class NetworkWatcherService extends EventEmitter {
   }
 
   /**
-   * macOS 原生系统桌面横幅通知
+   * 宿主机系统原生桌面横幅通知 (跨平台支持 macOS / Windows / Linux)
+   */
+  public sendDesktopNotification(title: string, body: string): void {
+    const cleanTitle = title.replace(/["'\\]/g, ' ');
+    const cleanBody = body.replace(/["'\\]/g, ' ');
+
+    if (process.platform === 'darwin') {
+      // macOS: 原生 osascript 通知中心
+      try {
+        const script = `display notification "${cleanBody}" with title "${cleanTitle}"`;
+        exec(`osascript -e '${script}'`, (err) => {
+          if (err) {
+            console.warn('[NetworkWatcher] Mac notification error:', err.message);
+          }
+        });
+      } catch (_) {}
+    } else if (process.platform === 'win32') {
+      // Windows: 原生 PowerShell BalloonTip / Toast 通知
+      try {
+        const singleLineBody = cleanBody.replace(/[\r\n]+/g, ' · ');
+        const psCommand = `powershell -NoProfile -ExecutionPolicy Bypass -Command "[reflection.assembly]::loadwithpartialname('System.Windows.Forms') | Out-Null; $notify = New-Object System.Windows.Forms.NotifyIcon; $notify.Icon = [System.Drawing.SystemIcons]::Information; $notify.Visible = $true; $notify.ShowBalloonTip(6000, '${cleanTitle}', '${singleLineBody}', [System.Windows.Forms.ToolTipIcon]::Info);"`;
+        exec(psCommand, (err) => {
+          if (err) {
+            console.warn('[NetworkWatcher] Windows notification error:', err.message);
+          }
+        });
+      } catch (_) {}
+    } else if (process.platform === 'linux') {
+      // Linux: 通用 libnotify notify-send
+      try {
+        exec(`notify-send "${cleanTitle}" "${cleanBody}" -a "LightDrop"`, (err) => {
+          if (err) {
+            // Linux 无图形界面或未安装 libnotify 时静默忽略
+          }
+        });
+      } catch (_) {}
+    }
+  }
+
+  /**
+   * 兼容旧接口别名
    */
   public sendMacNotification(title: string, body: string): void {
-    if (process.platform !== 'darwin') return;
-    try {
-      const cleanTitle = title.replace(/["'\\]/g, ' ');
-      const cleanBody = body.replace(/["'\\]/g, ' ');
-      const script = `display notification "${cleanBody}" with title "${cleanTitle}"`;
-      exec(`osascript -e '${script}'`, (err) => {
-        if (err) {
-          console.warn('[NetworkWatcher] Mac notification error:', err.message);
-        }
-      });
-    } catch (_) {}
+    this.sendDesktopNotification(title, body);
   }
 
   /**
